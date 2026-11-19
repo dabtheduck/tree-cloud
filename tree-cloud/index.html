@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#d8dfc9">
+<title>Tree Cloud</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="dateline">
+    <span><b id="todayLine"></b> · <span id="todayCount">0 plants today</span></span>
+    <span class="soundrow">
+      <label class="tgl"><input type="checkbox" id="soundOn" checked> Sound</label>
+      <button class="btn small" id="testSound" type="button" style="margin:0">Test</button>
+    </span>
+  </div>
+</header>
+
+<main>
+<!-- GROW -->
+<section id="tab-grow">
+  <canvas id="mindGarden" width="480" height="140"></canvas>
+  <p class="muted" id="giftNote" style="margin:8px 0 0"></p>
+  <div class="card hidden" id="monthlyCard">
+    <h2 id="monthlyTitle">Last month is done</h2>
+    <p id="monthlyText" class="muted"></p>
+    <button class="btn" id="monthlyExportText" type="button">Back it up — text only</button>
+    <button class="btn" id="monthlyExportVoice" type="button">Back it up — with voice</button>
+    <button class="btn secondary" id="monthlyDelete" type="button">Delete last month</button>
+    <button class="btn ghost" id="monthlyKeep" type="button">Keep it for now</button>
+    <p id="monthlyStatus" class="muted"></p>
+  </div>
+  <div class="steps"><div class="step on" id="s1">1 Check in</div><div class="step" id="s2">2 Pick a world</div><div class="step" id="s3">3 Answer &amp; grow</div></div>
+
+  <div id="step1" class="card">
+    <h2>How are you feeling right now?</h2>
+    <div class="moodgrid" id="moodGrid"></div>
+    <div class="tierchips"><span class="tierchip" data-tier="tree">1–3 · Tree</span><span class="tierchip" data-tier="shrub">4–6 · Shrub</span><span class="tierchip" data-tier="flower">7–10 · Flower</span></div>
+    <p class="plantline" id="moodPlant">Mood 5 — answer a few prompts and grow something.</p>
+    <div id="moodBranch" class="hidden">
+      <p id="moodBranchText" class="muted"></p>
+      <button class="btn secondary" id="goodDaysBtn" type="button">Look back at your good days →</button>
+    </div>
+    <button class="btn" id="toStep2" type="button">Next: pick a world →</button>
+  </div>
+
+  <div id="step2" class="card hidden">
+    <h2>Where does it grow?</h2>
+    <div class="worlds">
+      <button class="world" data-world="valley" type="button"><canvas width="220" height="110"></canvas><b>Rivers &amp; Valleys</b><span class="muted">Lush green hills, a river, pines.</span></button>
+      <button class="world" data-world="desert" type="button"><canvas width="220" height="110"></canvas><b>Desert</b><span class="muted">Red mesas, cracked sand, hard sun.</span></button>
+      <button class="world" data-world="space" type="button"><canvas width="220" height="110"></canvas><b>Outer Space</b><span class="muted">Black sky, moon dust, Earth above.</span></button>
+    </div>
+    <button class="btn" id="toStep3" type="button">See what you'll grow →</button>
+    <button class="btn ghost" id="backTo1" type="button">← Back</button>
+  </div>
+
+  <div id="stepPreview" class="card hidden">
+    <h2 id="previewTitle">You'll be growing…</h2>
+    <canvas class="scene small" id="previewScene" width="480" height="170"></canvas>
+    <p class="plantline" id="previewSpecies"></p>
+    <p class="muted" id="previewDest" style="text-align:center"></p>
+    <button class="btn" id="startGrow" type="button">Grow</button>
+    <button class="btn quiet" id="byoToggle" type="button">or grow your own?</button>
+    <div id="byoPanel" class="hidden">
+      <div class="typebtns">
+        <button type="button" data-byo-type="tree">Tree · 8</button>
+        <button type="button" data-byo-type="shrub">Shrub · 6</button>
+        <button type="button" data-byo-type="flower">Flower · 4</button>
+      </div>
+      <input type="text" id="byoTopic" maxlength="40" placeholder="e.g. work, family, friends" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:15px">
+      <p class="muted" style="margin:6px 0">Colour</p>
+      <div class="swatches" id="byoColours"></div>
+      <div id="byoPreview" class="muted"></div>
+      <button class="btn" id="byoStart" type="button">Grow your own →</button>
+    </div>
+    <button class="btn ghost" id="backTo2" type="button">← Back</button>
+  </div>
+
+  <div id="step3" class="hidden">
+    <canvas class="scene" id="scene" width="480" height="260"></canvas>
+    <div class="progress"><i id="progFill"></i></div>
+    <div class="progmeta"><span id="progPct">0%</span><span id="progLabel">0 / 8</span><span id="progEnd"></span></div>
+    <div class="card" id="promptCard">
+      <div class="chips"><span class="chip" id="layerChip">Layer 1 / 8</span><span class="chip" id="kindChip">yes / no</span><span class="chip" id="worldChip">Valley</span></div>
+      <p class="promptq" id="promptQ"></p>
+      <p class="muted" id="remarkLine" style="margin:6px 0"></p>
+      <div id="ynBox" class="yn"><button type="button" data-yn="Yes">YES</button><button type="button" data-yn="No">NO</button></div>
+      <div id="textBox" class="hidden"><textarea id="answerText" placeholder="Type it, or record a voice note below…" maxlength="2000"></textarea></div>
+      <div class="voicerec">
+        <b>Voice note (up to 1:00)</b> <span class="timer" id="recTimer">0:00</span><br>
+        <button class="btn small" id="recBtn" type="button">● Record</button>
+        <button class="btn small hidden" id="stopRec" type="button">■ Stop</button>
+        <span id="recStatus" class="muted"></span>
+        <audio id="recPlay" controls class="hidden"></audio>
+        <div><button class="btn small hidden" id="rerecord" type="button">Re-record</button></div>
+      </div>
+      <button class="btn" id="growBtn" type="button">Grow 🌱</button>
+      <p class="muted" id="growHint">Answer first — then press Grow.</p>
+    </div>
+    <div class="card hidden" id="doneCard">
+      <h2 id="doneTitle">PLANTED!</h2><p id="doneText"></p>
+      <h3>Branches</h3>
+      <div id="doneBranches"></div>
+      <div id="feelBetter" class="hidden">
+        <h3 id="feelQuestion">Do you feel better?</h3>
+        <div id="feelButtons"></div>
+      </div>
+      <button class="btn" id="seeGarden" type="button">Back to your cloud →</button>
+      <button class="btn secondary" id="growAnother" type="button">Grow another plant</button>
+    </div>
+  </div>
+</section>
+
+<!-- GARDEN -->
+<section id="tab-garden" class="hidden">
+  <h2>Garden — today</h2>
+  <div class="filters" id="gardenFilters">
+    <button type="button" data-filter="all" class="on">All</button>
+    <button type="button" data-filter="valley">Rivers &amp; Valleys</button>
+    <button type="button" data-filter="desert">Desert</button>
+    <button type="button" data-filter="space">Outer Space</button>
+  </div>
+  <div id="gardenGrid" class="grid"></div>
+  <p id="gardenEmpty" class="muted">Nothing grown yet today. Go to Grow and plant something.</p>
+  <div id="plantDetail" class="hidden">
+    <button class="btn ghost" id="backGarden" type="button">← Back to Garden</button>
+    <canvas class="scene small" id="detailScene" width="480" height="260"></canvas>
+    <div class="chips" id="detailChips"></div>
+    <h3>Branches</h3>
+    <div id="detailBranches"></div>
+    <button class="btn secondary" id="deletePlant" type="button">Delete this plant</button>
+  </div>
+</section>
+
+<!-- CALENDAR -->
+<section id="tab-calendar" class="hidden">
+  <h2>Calendar</h2>
+  <p class="muted">Tap a day to see its plants.</p>
+  <div class="calhead"><button class="btn small" id="prevMonth" type="button">← Prev</button><b id="calTitle"></b><button class="btn small" id="nextMonth" type="button">Next →</button></div>
+  <div class="cal" id="calGrid"></div>
+  <div id="dayDetail" class="hidden card"><h3 id="dayTitle"></h3><div id="dayPlants"></div></div>
+  <div class="card">
+    <h3>Good days — to look back on</h3>
+    <p class="muted">Days you rated 7 or higher. Tap a plant to hear / read what made it good.</p>
+    <div id="goodDays"></div>
+    <p id="goodDaysEmpty" class="muted">No good days saved yet — plant a flower on a good day and it'll live here.</p>
+  </div>
+</section>
+<!-- SETTINGS -->
+<section id="tab-settings" class="hidden">
+  <h2>Settings</h2>
+  <div class="card">
+    <h3>Your garden's name</h3>
+    <p class="muted">Just the name, nothing else. Max 6 characters. Leave it blank for no sign.</p>
+    <input type="text" id="gardenName" maxlength="6" placeholder="e.g. DAB" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:16px">
+    <div class="signpreview"><span class="board" id="signPreview">Your sign</span></div>
+  </div>
+  <div class="card">
+    <h3>Sound &amp; feel</h3>
+    <p class="muted">One gentle sound set — a muted Pixel Rain. Desert and Outer Space have their own sounds.</p>
+    <button class="btn small" id="testSoundSettings" type="button">Test sound</button>
+  </div>
+  <div class="card">
+    <h3>Reminders — one simple nudge</h3>
+    <p class="muted">Pick one time. That's it. At that time, open Tree Cloud and it'll ask “How are you feeling right now?”</p>
+    <label class="muted">Remind me at <input type="time" id="remindTime" value="19:00"></label><br>
+    <button class="btn" id="enableRemind" type="button">Turn on reminders</button>
+    <button class="btn ghost" id="disableRemind" type="button">Turn off</button>
+    <button class="btn small" id="testRemind" type="button">Test nudge now</button>
+    <p id="remindStatus" class="muted"></p>
+    <p class="muted">On iPhone, the simplest reliable way: set one Clock alarm for that time, called “How are you feeling?” When it rings, open Tree Cloud.</p>
+  </div>
+  <div class="card">
+    <h3>Backup — yours, on this device</h3>
+    <p class="muted">Export a file you can keep, or move to another phone. Nothing is uploaded anywhere.</p>
+    <button class="btn" id="exportText" type="button">Export — text only</button>
+    <button class="btn" id="exportVoice" type="button">Export — with voice notes</button>
+    <label class="muted"><b>Import</b><input type="file" id="importFile" accept="application/json,.json"></label>
+    <p id="backupStatus" class="muted"></p>
+  </div>
+  <div class="card">
+    <h3>About your data</h3>
+    <p class="muted">Local only. No accounts, no cloud. Your garden lives on this device.</p>
+  </div>
+</section>
+</main>
+</div>
+
+<nav class="tabbar">
+  <button data-tab="grow" class="on" type="button"><span class="ic">🌱</span>Grow</button>
+  <button data-tab="garden" type="button"><span class="ic">🌿</span>Garden</button>
+  <button data-tab="calendar" type="button"><span class="ic">📅</span>Calendar</button>
+  <button data-tab="settings" type="button"><span class="ic">⚙️</span>Settings</button>
+</nav>
+
+<script src="prompts.js"></script>
+<script src="app.js"></script>
+<script>if('serviceWorker' in navigator){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }</script>
+</body>
+</html>

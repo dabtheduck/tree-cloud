@@ -27,7 +27,7 @@
 <main>
 <!-- GROW -->
 <section id="tab-grow">
-  <canvas id="mindGarden" width="480" height="140"></canvas>
+  <canvas id="mindGarden" width="600" height="320"></canvas>
   <p class="muted" id="giftNote" style="margin:8px 0 0"></p>
   <div class="card hidden" id="monthlyCard">
     <h2 id="monthlyTitle">Last month is done</h2>
@@ -147,7 +147,7 @@
   <p class="muted">Tap a day to see its plants.</p>
   <div class="calhead"><button class="btn small" id="prevMonth" type="button">← Prev</button><b id="calTitle"></b><button class="btn small" id="nextMonth" type="button">Next →</button></div>
   <div class="cal" id="calGrid"></div>
-  <div id="dayDetail" class="hidden card"><h3 id="dayTitle"></h3><div id="dayPlants"></div></div>
+  <div id="dayDetail" class="hidden card"><h3 id="dayTitle"></h3><canvas id="daySnap" width="300" height="190" style="width:100%;border-radius:6px;display:block;image-rendering:pixelated"></canvas><div id="dayPlants"></div></div>
   <div class="card">
     <h3>Good days — to look back on</h3>
     <p class="muted">Days you rated 7 or higher. Tap a plant to hear / read what made it good.</p>
@@ -188,8 +188,9 @@
     <p id="backupStatus" class="muted"></p>
   </div>
   <div class="card">
-    <h3>About your data</h3>
-    <p class="muted">Local only. No accounts, no cloud. Your garden lives on this device.</p>
+    <h3>About</h3>
+    <p>There's much to be thankful for. But sometimes, our minds get clouded and can't see beyond our problems. Hence, Tree Cloud. Try building plants here and may hope start blooming in your mind.</p>
+    <p class="muted">Your data stays local only — no accounts, no cloud. Your garden lives on this device.</p>
   </div>
 </section>
 </main>

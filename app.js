@@ -67,7 +67,7 @@ function dayMood(plants){ if(!plants.length) return null; var a=plants.reduce(fu
 function speciesOf(p){ if(p.species) return p.species; return P.speciesFor(p.mood, p.world); }
 
 /* ---------- pixel scene ---------- */
-function drawPlant(x, cx, base, h, prog, type, species, t, color){
+function drawPlant(x, cx, base, h, prog, type, species, t, color, world){
   var pr=P.profileFor(species, color), sway=Math.sin((t||0)*pr.speed+pr.phase)*pr.sway*prog, leaf=pr.leaf, leaf2=pr.leaf2, trunk=pr.trunk;
   /* Per-species motion signature — each of the 30 (+9 BYO) moves differently. */
   var motion=pr.motion||"sway";
@@ -164,15 +164,18 @@ function drawPlant(x, cx, base, h, prog, type, species, t, color){
       x.fillStyle="#a0522d"; x.fillRect(cx-5+sway,base-stemH-5,10,10);
     }
   }
-  /* Motion extras — twinkle / glow / bloom / flutter / ripple / unfurl, per species. */
+  /* Motion extras — twinkle / glow / bloom / flutter / ripple / unfurl, per species.
+     Sparkles only in Outer Space (dab, 2026-11-21): no sparkles on plants in
+     Rivers & Valleys or Desert — Space keeps its sparkles/twinkles. */
   var tw=Math.sin((t||0)*3+pr.phase);
-  if(motion==="twinkle" && tw>0.4){ x.fillStyle="#fff"; x.fillRect(cx-14+sway,base-h+8,3,3); x.fillRect(cx+12+sway,base-h+20,3,3); }
-  if(motion==="glow"){ x.fillStyle="#d9a441"; if(tw>0){ x.fillRect(cx-10+sway,base-h+12,4,4); x.fillRect(cx+8+sway,base-h+4,4,4); } }
+  var sparkleOK = (world==="space");
+  if(motion==="twinkle" && sparkleOK && tw>0.4){ x.fillStyle="#fff"; x.fillRect(cx-14+sway,base-h+8,3,3); x.fillRect(cx+12+sway,base-h+20,3,3); }
+  if(motion==="glow" && sparkleOK){ x.fillStyle="#d9a441"; if(tw>0){ x.fillRect(cx-10+sway,base-h+12,4,4); x.fillRect(cx+8+sway,base-h+4,4,4); } }
   if(motion==="bloom" && prog>0.8){ x.fillStyle=leaf2; x.fillRect(cx-18+sway,base-h+6,8,8); x.fillRect(cx+10+sway,base-h+6,8,8); }
   if(motion==="flutter"){ x.fillStyle=leaf; x.fillRect(cx-24+sway*1.4,base-h+14,16,4); x.fillRect(cx+8+sway*1.4,base-h+22,16,4); }
   if(motion==="ripple"){ x.fillStyle=leaf; x.fillRect(cx-20+Math.sin((t||0)*2+pr.phase)*4,base-h+10,6,20); }
   if(motion==="unfurl"){ x.fillStyle=leaf2; x.fillRect(cx-6+sway,base-h-6-prog*8,12,6); }
-  if(pr.special && prog>0.9){ x.fillStyle="#fff3b0"; x.fillRect(cx-3,base-h-10,6,6); }
+  if(pr.special && sparkleOK && prog>0.9){ x.fillStyle="#fff3b0"; x.fillRect(cx-3,base-h-10,6,6); }
 }
 /* ---------- fluffy pixel clouds, weeds, sign, scaled plants (mockup style) ---------- */
 /* A chunky pixel circle: horizontal slices, so clouds and suns look hand-placed, not vector-smooth. */
@@ -225,11 +228,20 @@ function skyGradient(x, W, H, topC, horC){
   var bands=48;
   for(var band=0; band<bands; band++){ x.fillStyle=lerpColor(topC, horC, band/(bands-1)); x.fillRect(0, Math.floor(band*H/bands), W, Math.ceil(H/bands)+1); }
 }
+/* lerpColor accepts "#rrggbb" AND "rgb(r,g,b)" — drawScene lerps palettes twice
+   (world palette, then sky band), and the old hex-only parse turned the second
+   lerp into NaN, which painted every grow-scene sky black. That is why Desert,
+   Valleys and Space all looked the same black sky in the session view. */
+function parseRGB(c){
+  if(!c) return [0,0,0];
+  if(c.charAt(0)==="#"){ var v=parseInt(c.slice(1),16); return [(v>>16)&255,(v>>8)&255,v&255]; }
+  var m=String(c).match(/\d+/g); return m? [+m[0],+m[1],+m[2]] : [0,0,0];
+}
 function lerpColor(a,b,t){
-  var pa=parseInt(a.slice(1),16), pb=parseInt(b.slice(1),16);
-  var r=Math.round(((pa>>16)&255)+(((pb>>16)&255)-((pa>>16)&255))*t);
-  var g=Math.round(((pa>>8)&255)+(((pb>>8)&255)-((pa>>8)&255))*t);
-  var bl=Math.round((pa&255)+((pb&255)-(pa&255))*t);
+  var pa=parseRGB(a), pb=parseRGB(b);
+  var r=Math.round(pa[0]+(pb[0]-pa[0])*t);
+  var g=Math.round(pa[1]+(pb[1]-pa[1])*t);
+  var bl=Math.round(pa[2]+(pb[2]-pa[2])*t);
   return "rgb("+r+","+g+","+bl+")";
 }
 function mulberry32(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; var t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -296,8 +308,9 @@ function drawSign(x, name, groundY){
   x.textAlign="left";
 }
 /* Simplified mini plants for the cloud garden, as the mockup draws them — NOT the full plant
-   drawings. One small silhouette per shape family, with sparkles on the newest plant. */
-function drawMiniPlant(x, cx, gy, species, color, isNewest){
+   drawings. One small silhouette per shape family, with sparkles on the newest plant
+   ONLY in Outer Space (dab, 2026-11-21: no sparkles in Rivers & Valleys or Desert). */
+function drawMiniPlant(x, cx, gy, species, color, isNewest, world){
   var pr=P.profileFor(species, color);
   var leaf=pr.leaf, leaf2=pr.leaf2, trunk=pr.trunk, accent=pr.accent||leaf2;
   var shape=pr.shape;
@@ -356,20 +369,20 @@ function drawMiniPlant(x, cx, gy, species, color, isNewest){
     x.fillStyle=leaf; x.fillRect(cx-20, gy-59, 40, 32);
     x.fillStyle=leaf2; x.fillRect(cx-13, gy-52, 26, 13);
   }
-  if(isNewest){
+  if(isNewest && world==="space"){
     x.fillStyle="#ffd94d"; x.fillRect(cx-24, gy-74, 3, 3); x.fillRect(cx+15, gy-80, 3, 3);
     x.fillStyle="#ffffff"; x.fillRect(cx+21, gy-64, 3, 3);
   }
 }
 /* Draw a plant at a scale that actually fits the canvas — the exact silhouette, just smaller,
    so plants are never clipped off the top of a card, thumbnail or preview. Returns the scale used. */
-function drawScaledPlant(x, cx, base, h, prog, type, species, t, color){
+function drawScaledPlant(x, cx, base, h, prog, type, species, t, color, world){
   var avail=base-8;                 /* room above the base line */
   var total=h+56;                   /* canopy overhang above the trunk top */
   var s=Math.min(1, avail/total);
   if(!(s>0)) s=0.2;
   x.save(); x.translate(cx, base); x.scale(s,s);
-  drawPlant(x, 0, 0, h, prog, type, species, t, color);
+  drawPlant(x, 0, 0, h, prog, type, species, t, color, world);
   x.restore();
   return s;
 }
@@ -396,10 +409,49 @@ function drawScene(cv, plant, stage, total, world, burst, species, time, color){
     x.fillStyle="#fff";
     for(var s=0;s<nStars;s++){ x.fillRect(Math.floor(rnd()*W), Math.floor(rnd()*(H*0.55)), 2, 2); }
   }
-  /* sun / moon / earth, drawn as soft pixel circles */
-  if(world==="desert"){ pxCircle(x, W-52, 34, 17, "#ffdf6b"); pxCircle(x, W-52, 34, 11, "#ffe98f"); }
-  if(world==="space"){ pxCircle(x, W-60, 36, 20, "#7fb3c8"); pxCircle(x, W-66, 30, 6, "#2d6a4f"); pxCircle(x, W-52, 42, 4, "#2d6a4f"); }
-  if(world==="valley" && prog>=0.5){ pxCircle(x, 40, 34, 14, "#fff3b0"); pxCircle(x, 40, 34, 9, "#fff9cf"); }
+  /* Sky life, per the mockup's drawScene: blocky suns, moon, nebula, Earth, storm,
+     sand, and the phase events (birds, plane, balloon, fireflies, aurora, satellites).
+     The plant stays on its cloud island below — only the background changes. */
+  var rndB=mulberry32(1234+stage*77+(world==="desert"?31:world==="space"?57:89));
+  if(world==="space"){
+    x.fillStyle="rgba(150,90,220,0.5)"; for(var nb=0;nb<14;nb++){ x.fillRect(20+Math.floor(rndB()*120), 10+Math.floor(rndB()*40), 6, 3); }
+    x.fillStyle="rgba(60,200,200,0.45)"; for(var nb2=0;nb2<10;nb2++){ x.fillRect(300+Math.floor(rndB()*130), 50+Math.floor(rndB()*36), 6, 3); }
+    /* Earth, top-left, blocky pixel squares like the mockup */
+    x.fillStyle="#3d7bd6"; x.fillRect(18,14,18,18);
+    x.fillStyle="#57a75a"; x.fillRect(22,18,6,6); x.fillRect(28,16,6,3); x.fillRect(20,26,6,3);
+    x.fillStyle="#e6f9e9"; x.fillRect(18,26,6,3);
+  }
+  /* Sun: big blocky yellow sun in Desert while the sky is still light, smaller sun in the Valleys */
+  if(world==="desert" && skyP<0.6){ x.fillStyle="#ffe94d"; x.fillRect(20,16,28,28); x.fillStyle="#fff3b0"; x.fillRect(14,24,40,14); x.fillRect(28,10,12,40); }
+  else if(world==="valley" && skyP<0.5){ x.fillStyle="#ffd94d"; x.fillRect(22,18,18,18); x.fillStyle="#ffe98f"; x.fillRect(18,22,26,10); }
+  /* Moon once the sky has darkened (not in Desert) */
+  if(skyP>0.55 && world!=="desert"){ x.fillStyle="#ffe9a3"; x.fillRect(W-72,18,16,16); x.fillStyle="#fff3b0"; x.fillRect(W-76,22,24,8); }
+  /* Sunset at the end (not in Space) */
+  if(phase>=8 && world!=="space"){ x.fillStyle="#c96f4a"; x.fillRect(W-90,40,22,22); x.fillStyle="#e8c96a"; x.fillRect(W-96,52,34,4); }
+  /* Early phase: storm clouds + rain in the Valleys, wind-blown sand in the Desert */
+  if(world==="valley" && phase<=1){
+    drawPuffyCloud(x, 70, 26, 90, "rgba(64,72,84,0.95)", "rgba(44,50,60,0.95)");
+    drawPuffyCloud(x, 400, 18, 80, "rgba(64,72,84,0.95)", "rgba(44,50,60,0.95)");
+    x.fillStyle="rgba(140,185,230,0.8)";
+    for(var rn=0;rn<18;rn++){ x.fillRect(20+Math.floor(rndB()*W*0.9), 44+Math.floor(rndB()*28), 2, 7); }
+  }
+  if(world==="desert" && phase<=1){
+    x.fillStyle="rgba(230,170,80,0.55)";
+    for(var sw=0;sw<14;sw++){ x.fillRect(Math.floor(rndB()*W), 24+Math.floor(rndB()*60), 9, 3); }
+    x.fillStyle="rgba(220,150,60,0.28)"; x.fillRect(0,36,W,8); x.fillRect(0,78,W,8);
+  }
+  /* Phase events (mockup): birds, plane, balloon, fireflies, aurora, satellites */
+  function bird(bx,by){ x.fillStyle="#26343f"; x.fillRect(bx,by,6,3); x.fillRect(bx+9,by,6,3); x.fillRect(bx+6,by+3,3,3); }
+  if(world!=="space" && phase===2){ bird(60,30); bird(100,44); bird(330,26); }
+  if(world!=="space" && phase===4){ x.fillStyle="#e8edf2"; x.fillRect(W-150,30,33,6); x.fillRect(W-140,24,6,6); x.fillStyle="#b23c2e"; x.fillRect(W-150,28,6,3); }
+  if(world!=="space" && phase===5){ x.fillStyle="#d8434f"; x.fillRect(W-70,20,15,15); x.fillStyle="#e8edf2"; x.fillRect(W-66,36,3,6); x.fillRect(W-60,36,3,6); x.fillStyle="#e0a92e"; x.fillRect(W-66,44,9,6); }
+  if(phase===6){ for(var mt=0;mt<3;mt++){ var mx=50+mt*60, my=24+mt*10; x.fillStyle="#fff"; x.fillRect(mx,my,3,3); x.fillStyle="#ffe9a3"; x.fillRect(mx+3,my+3,3,3); } }
+  if(phase===7){ x.fillStyle="rgba(102,255,178,0.55)"; for(var ax=0;ax<W;ax+=8){ var ay=16+Math.round(Math.sin(ax*0.03)*5); x.fillRect(ax,ay,8,3); } x.fillStyle="rgba(102,187,255,0.4)"; for(var ax2=0;ax2<W;ax2+=8){ var ay2=24+Math.round(Math.sin(ax2*0.03)*5); x.fillRect(ax2,ay2,8,3); } }
+  if(phase>=8){ x.fillStyle="#c9ccd4"; x.fillRect(60,44,12,6); x.fillStyle="#3d7bd6"; x.fillRect(48,44,9,6); x.fillRect(76,44,9,6); }
+  /* Climbing clouds for trees, rising as the plant grows (mockup) */
+  if(plant==="tree" && stage>=5){ drawDriftCloud(x, W*0.12, H*0.42, 56); drawDriftCloud(x, W*0.85, H*0.36, 48); }
+  if(plant==="tree" && stage>=6){ drawDriftCloud(x, W*0.28, H*0.58, 52); drawDriftCloud(x, W*0.72, H*0.62, 56); }
+  if(plant==="tree" && stage>=7){ drawDriftCloud(x, W*0.08, H*0.72, 60); drawDriftCloud(x, W*0.88, H*0.74, 60); }
   /* drifting fluffy clouds in the sky */
   if(prog>=0.25 && prog<0.8){
     drawDriftCloud(x, W*0.22, H*0.22, 64);
@@ -415,19 +467,26 @@ function drawScene(cv, plant, stage, total, world, burst, species, time, color){
   x.fillStyle=ground3;
   for(var tx=0; tx<W; tx+=26){ x.fillRect(tx, H-9, 10, 3); }
   if(world==="valley"){
-    x.fillStyle="#2c5231"; /* two small pines on the terrain, at the sides */
-    x.fillRect(22,H-32,16,8); x.fillRect(25,H-40,10,8);
-    x.fillRect(W-38,H-30,16,8); x.fillRect(W-35,H-38,10,8);
-    x.fillStyle="#6e4a2a"; x.fillRect(28,H-24,4,8); x.fillRect(W-32,H-22,4,6);
+    /* hills at the sides + a pine row along the ground, like the mockup */
+    x.fillStyle="#7cc46a"; x.fillRect(0,H-58,66,12); x.fillRect(0,H-52,78,6); x.fillRect(W-66,H-58,66,12); x.fillRect(W-78,H-52,78,6);
+    x.fillStyle="#2c5231";
+    for(var pn=0; pn<3; pn++){ var px0=6+pn*16; x.fillRect(px0,H-30,12,6); x.fillRect(px0+3,H-36,6,6); x.fillStyle="#6e4a2a"; x.fillRect(px0+5,H-24,2,6); x.fillStyle="#2c5231"; }
+    for(var pn2=0; pn2<3; pn2++){ var px1=W-18-pn2*16; x.fillRect(px1,H-30,12,6); x.fillRect(px1+3,H-36,6,6); x.fillStyle="#6e4a2a"; x.fillRect(px1+5,H-24,2,6); x.fillStyle="#2c5231"; }
     x.fillStyle="#4aa8dd"; x.fillRect(0,H-12,120,4); /* river */
+    x.fillStyle="#7cc46a"; x.fillRect(90,H-20,3,5); x.fillRect(96,H-18,3,3); x.fillRect(W-100,H-20,3,5); /* grass tufts */
   } else if(world==="desert"){
     x.fillStyle="#a8542f"; x.fillRect(24,H-30,44,14); x.fillRect(W-70,H-26,48,10); /* mesas */
     x.fillStyle="#c96f4a"; x.fillRect(24,H-30,44,4);
-    x.fillStyle="#2f7a3e"; x.fillRect(150,H-34,4,18); x.fillRect(146,H-28,12,3); /* cactus */
+    x.fillStyle="#b25e36"; x.fillRect(200,H-22,30,6); /* small middle mesa */
+    x.fillStyle="#2f7a3e"; x.fillRect(150,H-34,4,18); x.fillRect(146,H-28,12,3); /* cactus 1 */
     x.fillStyle="#e86a8a"; x.fillRect(149,H-38,6,4); /* cactus flower */
+    x.fillStyle="#3a8a4a"; x.fillRect(W-160,H-30,4,14); x.fillRect(W-164,H-24,12,3); /* cactus 2 */
+    x.fillStyle="#e86a8a"; x.fillRect(W-161,H-34,6,4);
+    x.fillStyle="#8a5a2e"; x.fillRect(90,H-20,4,3); x.fillRect(120,H-18,5,3); x.fillRect(W-120,H-20,4,3); x.fillRect(320,H-18,5,3); /* ground speckles */
   } else {
     x.fillStyle="#767c88"; x.fillRect(40,H-26,26,10); x.fillRect(W-80,H-24,34,8); /* craters */
     x.fillStyle="#5d636e"; x.fillRect(48,H-24,10,4); x.fillRect(W-72,H-22,12,4);
+    x.fillStyle="#8a8f9a"; x.fillRect(120,H-20,10,4); x.fillRect(W-140,H-18,8,4); /* rocks */
     x.fillStyle="#d8434f"; x.fillRect(W-46,H-38,3,22); /* flag pole */
     x.fillStyle="#e8edf2"; x.fillRect(W-46,H-38,14,8); /* flag */
   }
@@ -437,8 +496,10 @@ function drawScene(cv, plant, stage, total, world, burst, species, time, color){
   /* dry dead weeds: thin bent brown stalks — never a cross. They fade as the plant grows, replaced by it. */
   var weeds=Math.max(0, 2-Math.floor(prog*4));
   for(var w=0;w<weeds;w++){ var wx=44+w*70+(w===1?W-150:0); drawWeed(x, wx, base-2, w); }
-  var ps=drawScaledPlant(x, cx, base, h, prog, plant, sp, t, color);
-  if(burst){ for(var b=0;b<26;b++){ x.fillStyle=["#d9a441","#74c69d","#fff","#40916c"][b%4]; x.fillRect(cx+(Math.random()*120-60), base-h*ps+(Math.random()*80-40),4,4); } }
+  var ps=drawScaledPlant(x, cx, base, h, prog, plant, sp, t, color, world);
+  /* Burst sparkles ONLY in Outer Space (dab, 2026-11-21): no sparkles on plants
+     growing in Rivers & Valleys or Desert. Space keeps its sparkles/twinkles. */
+  if(burst && world==="space"){ for(var b=0;b<26;b++){ x.fillStyle=["#d9a441","#74c69d","#fff","#40916c"][b%4]; x.fillRect(cx+(Math.random()*120-60), base-h*ps+(Math.random()*80-40),4,4); } }
 }
 function startSceneAnim(){
   stopSceneAnim();
@@ -499,15 +560,25 @@ async function renderMindGarden(){ var cv=$("#mindGarden"); if(!cv) return; var 
   todays.forEach(function(p){ items.push({kind:"plant", p:p}); });
   gifts.forEach(function(g){ items.push({kind:"gift", g:g}); });
   for(var wi=0; wi<weeds; wi++) items.push({kind:"weed", seed:wi});
+  /* Draw order (dab, 2026-11-21: some plants were hidden behind the cloud):
+     Pass 1 draws ALL cloud islands first, pass 2 draws the sign and ALL plants /
+     gifts / weeds on top. Islands overlap each other's slots (island 2's puffs reach
+     into island 1's third slot), so drawing island-by-island let a later cloud
+     paint over an earlier plant. Now every plant is always in front of every cloud. */
   for(var r=0;r<lay.rows;r++){
     for(var isl=0; isl<3; isl++){
       var isle=CLOUD_ISLANDS[isl], cy=isle.baseY+r*150;
       drawCloudIsland(x, isle.cx, cy, isle.w);
-      if(r===0 && isl===0) drawSign(x, name, isle.baseY);
+    }
+  }
+  drawSign(x, name, CLOUD_ISLANDS[0].baseY);
+  for(var r2=0;r2<lay.rows;r2++){
+    for(var isl2=0; isl2<3; isl2++){
+      var isle2=CLOUD_ISLANDS[isl2], cy2=isle2.baseY+r2*150;
       for(var s=0;s<3;s++){
-        var idx=r*9+isl*3+s; if(idx>=items.length) break;
-        var it=items[idx], sx=CLOUD_SLOTS[isl][s], sy=cy;
-        if(it.kind==="plant"){ drawMiniPlant(x, sx, sy, speciesOf(it.p), it.p.color, idx===todays.length-1); }
+        var idx=r2*9+isl2*3+s; if(idx>=items.length) break;
+        var it=items[idx], sx=CLOUD_SLOTS[isl2][s], sy=cy2;
+        if(it.kind==="plant"){ drawMiniPlant(x, sx, sy, speciesOf(it.p), it.p.color, idx===todays.length-1, it.p.world); }
         else if(it.kind==="weed"){ drawWeed(x, sx, sy, it.seed); }
         else { /* gift sprout */
           x.fillStyle="#40916c"; x.fillRect(sx-2, sy-22, 4, 22);
@@ -544,7 +615,7 @@ function mindGardenClick(e){
 /* ---------- tabs ---------- */
 function switchTab(name){ $$(".tabbar button").forEach(function(b){ b.classList.toggle("on",b.dataset.tab===name); });
   ["grow","garden","calendar","settings"].forEach(function(t){ var el=$("#tab-"+t); if(el) el.classList.toggle("hidden",t!==name); });
-  if(name==="garden") renderGarden(); if(name==="calendar") renderCalendar(); if(name==="settings") renderSettings(); buzz(10); }
+  if(name==="garden") renderGarden(); if(name==="calendar"){ renderCalendar(); renderGoodDays(); } if(name==="settings") renderSettings(); buzz(10); }
 $$(".tabbar button").forEach(function(b){ b.addEventListener("click",function(){ sfx("tap"); switchTab(b.dataset.tab); }); });
 
 /* ---------- Settings ---------- */
@@ -704,13 +775,17 @@ async function finishSession(){
     var fb=$("#feelBetter"); fb.classList.remove("hidden");
     if(p.mood>=7){
       $("#feelQuestion").textContent="Keep the ball rolling! Gather as many good memories as you can!";
-      feelButtons([{label:"Grow another plant", cls:"", fn:growAnotherPlant},{label:"Back to cloud", cls:"secondary", fn:backToCloud}]);
+      /* No buttons here — the done card already has the ONE "Back to your cloud"
+         button and "Grow another plant" below (dab, 2026-11-21: never repeat them). */
     } else {
       $("#feelQuestion").textContent="Do you feel better?";
       feelButtons([
-        {label:"Yes — I feel better", cls:"", fn:function(){ $("#feelQuestion").textContent="Let's go!! That's a win!"; feelButtons([{label:"Grow another plant", cls:"", fn:growAnotherPlant},{label:"Back to cloud", cls:"secondary", fn:backToCloud}]); sfx("fanfare"); }},
+        {label:"Yes — I feel better", cls:"", fn:function(){ $("#feelQuestion").textContent="Let's go!! That's a win!"; sfx("fanfare"); }},
         {label:"No — not yet", cls:"secondary", fn:function(){ $("#feelQuestion").textContent="That's so real. Do you want to head back to your cloud, or keep growing another plant?";
-          hasGoodDays().then(function(has){ var bs=[{label:"Back to cloud", cls:"secondary", fn:backToCloud},{label:"Grow another plant", cls:"", fn:growAnotherPlant}];
+          hasGoodDays().then(function(has){ var bs=[];
+            /* Only "Review your good days" goes here — "Back to your cloud" and
+               "Grow another plant" already exist once on the done card below
+               (dab, 2026-11-21), so they must never be repeated here. */
             if(has) bs.push({label:"Review your good days", cls:"secondary", fn:function(){ switchTab("calendar"); renderGoodDays(); document.getElementById("goodDays").scrollIntoView({behavior:"smooth"}); }});
             feelButtons(bs); }); }}
       ]);

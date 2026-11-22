@@ -6,7 +6,10 @@ var P=window.TC_PROMPTS;
 var DBNAME="tree-cloud", STORE="plants", db=null;
 var soundOn = localStorage.getItem("tc-sound")!=="off";
 var soundPreset = "mutedpixel"; /* dab, 2026-11-19: presets removed from Settings — one standard sound, a muted Pixel Rain. */
-var session=null, ynAnswer=null, audioBlob=null, mediaRec=null, recChunks=[], recTimer=null, recSecs=0, recStream=null;
+var session=null, ynAnswer=null, audioBlob=null, mediaRec=null, recChunks=[], recTimer=null, recSecs=0, recStream=null, advancing=false;
+/* Congratulations rotation, mockup exactly: starts at a random line each load and
+   rotates in order, in memory only (the mockup does not persist the index). */
+var congratsIdx = Math.floor(Math.random()*P.congrats.length);
 var calCursor=new Date(); calCursor.setDate(1);
 var WORLD_LABEL={valley:"Rivers & Valleys",desert:"Desert",space:"Outer Space"};
 var WORLD_KEY={valley:"valley",desert:"desert",space:"space"};
@@ -46,8 +49,7 @@ function sfx(name){ if(!soundOn) return;
 function buzz(p){ try{ if(navigator.vibrate) navigator.vibrate(p||15); }catch(e){} }
 function bindSoundControls(){
   var so=$("#soundOn"); if(so){ so.checked=soundOn; so.addEventListener("change",function(){ soundOn=this.checked; localStorage.setItem("tc-sound",soundOn?"on":"off"); if(soundOn) sfx("tap"); }); }
-  var ts=$("#testSound"); if(ts) ts.addEventListener("click",function(){ sfx("fanfare"); buzz([20,40,20]); });
-  /* No preset picker in Settings any more (dab, 2026-11-19) — one standard sound only. */
+  /* No sound test any more (Debs, 2026-11-22) — the Sound on/off toggle is the only sound control. */
 }
 
 /* ---------- IndexedDB ---------- */
@@ -63,6 +65,10 @@ function dbDel(id){ return new Promise(function(res,rej){ var r=tx("readwrite").
 function dstr(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function todayStr(){ return dstr(new Date()); }
 function prettyDate(s){ var p=s.split("-"); return p[2]+"-"+p[1]+"-"+p[0]; }
+/* Dateline, mockup exactly: "THU 19 NOV" — weekday 3-letter caps, day number,
+   month 3-letter caps. The mockup's is a fixed demo date; the PWA shows today, live. */
+function datelineStr(d){ var WD=["SUN","MON","TUE","WED","THU","FRI","SAT"], MO=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  return WD[d.getDay()]+" "+d.getDate()+" "+MO[d.getMonth()]; }
 function dayMood(plants){ if(!plants.length) return null; var a=plants.reduce(function(s,p){return s+p.mood},0)/plants.length; return a; }
 function speciesOf(p){ if(p.species) return p.species; return P.speciesFor(p.mood, p.world); }
 
@@ -424,10 +430,14 @@ function drawScene(cv, plant, stage, total, world, burst, species, time, color){
   /* Sun: big blocky yellow sun in Desert while the sky is still light, smaller sun in the Valleys */
   if(world==="desert" && skyP<0.6){ x.fillStyle="#ffe94d"; x.fillRect(20,16,28,28); x.fillStyle="#fff3b0"; x.fillRect(14,24,40,14); x.fillRect(28,10,12,40); }
   else if(world==="valley" && skyP<0.5){ x.fillStyle="#ffd94d"; x.fillRect(22,18,18,18); x.fillStyle="#ffe98f"; x.fillRect(18,22,26,10); }
-  /* Moon once the sky has darkened (not in Desert) */
-  if(skyP>0.55 && world!=="desert"){ x.fillStyle="#ffe9a3"; x.fillRect(W-72,18,16,16); x.fillStyle="#fff3b0"; x.fillRect(W-76,22,24,8); }
-  /* Sunset at the end (not in Space) */
-  if(phase>=8 && world!=="space"){ x.fillStyle="#c96f4a"; x.fillRect(W-90,40,22,22); x.fillStyle="#e8c96a"; x.fillRect(W-96,52,34,4); }
+  /* Moon once the sky has darkened — Outer Space ONLY (dab, 2026-11-21: remove the
+     planet from every background except Outer Space). The moon used to show in
+     Rivers & Valleys too; it read as a planet there, so it is gone from Valley.
+     The blocky suns below stay — they are suns, not planets. */
+  if(skyP>0.55 && world==="space"){ x.fillStyle="#ffe9a3"; x.fillRect(W-72,18,16,16); x.fillStyle="#fff3b0"; x.fillRect(W-76,22,24,8); }
+  /* No sunset disc in Desert or Rivers & Valleys either (dab, 2026-11-21): the plain
+     orange disc at the end read as a planet in both worlds, so it is gone. The
+     blocky yellow suns above are the sun in those worlds. Outer Space never had one. */
   /* Early phase: storm clouds + rain in the Valleys, wind-blown sand in the Desert */
   if(world==="valley" && phase<=1){
     drawPuffyCloud(x, 70, 26, 90, "rgba(64,72,84,0.95)", "rgba(44,50,60,0.95)");
@@ -526,14 +536,19 @@ function gardenName(){ return (localStorage.getItem("tc-garden-name")||"").slice
    sky bands by mood, wooden sign on the left island, mini plants / gifts / weeds in slot order. */
 var CLOUD_ISLANDS=[{cx:100,w:196,baseY:226},{cx:300,w:216,baseY:240},{cx:500,w:196,baseY:226}];
 var CLOUD_SLOTS=[[140,182,224],[270,316,362],[452,500,544]];
-function cloudLayout(n){ var rows=Math.max(1, Math.ceil(n/9)); return {perRow:9, rows:rows, rowH:150}; }
+function cloudLayout(n){ var rows=Math.max(1, Math.ceil(n/6)); return {perRow:6, rows:rows, rowH:150}; }
 async function renderMindGarden(){ var cv=$("#mindGarden"); if(!cv) return; var x=cv.getContext("2d"); if(!x) return;
   var all=await dbAll(); var todays=all.filter(function(p){ return p.date===todayStr(); });
   var weeds=getWeeds();
   var gifts=getGifts().filter(function(g){ return g.date===todayStr(); });
   var n=todays.length+weeds+gifts.length;
   var lay=cloudLayout(Math.max(9,n)), W=600, H=320+(lay.rows-1)*150;
-  cv.width=W; cv.height=H; cv.style.height=(H*(cv.clientWidth||600)/W)+"px";
+  cv.width=W; cv.height=H;
+  /* Size by aspect ratio, never from clientWidth: clientWidth is 0 while the garden
+     is hidden (e.g. during a grow session), which used to leave a wrong fixed
+     height behind — one reason the garden could look squished on first look after
+     growing. With aspect-ratio the canvas always scales proportionally. */
+  cv.style.aspectRatio=W+" / "+H; cv.style.height="auto";
   /* sky: 10 bands, colour by mood (today's average, else the mood on the scale) */
   var m = todays.length ? dayMood(todays) : mood;
   var skyTop, skyBot;
@@ -588,8 +603,9 @@ async function renderMindGarden(){ var cv=$("#mindGarden"); if(!cv) return; var 
     }
   }
   var gn=$("#giftNote"); if(gn && !gifts.length) gn.textContent="";
-  var tc=$("#todayCount"); if(tc) tc.textContent=todays.length+" plant"+(todays.length===1?"":"s")+" today";
-  var tl=$("#todayLine"); if(tl) tl.textContent=prettyDate(todayStr());
+  /* Dateline count, mockup exactly: "N today · M total" — today count, then total plants ever. */
+  var tc=$("#todayCount"); if(tc) tc.textContent=todays.length+" today · "+all.length+" total";
+  var tl=$("#todayLine"); if(tl) tl.textContent=datelineStr(new Date());
 }
 function mindGardenClick(e){
   var cv=$("#mindGarden"); if(!cv) return; var r=cv.getBoundingClientRect(); var px=(e.clientX-r.left)*(cv.width/r.width), py=(e.clientY-r.top)*(cv.height/r.height);
@@ -608,7 +624,7 @@ function mindGardenClick(e){
     if(best<0) return;
     if(best<todays.length){ openPlant(todays[best].id); return; }
     var gIdx=best-todays.length;
-    if(gIdx>=0 && gIdx<gifts.length){ var gn=$("#giftNote"); if(gn) gn.textContent=P.GIFT_NOTES[Math.floor(Math.random()*P.GIFT_NOTES.length)]; sfx("tap"); }
+    if(gIdx>=0 && gIdx<gifts.length){ var g=gifts[gIdx]; showEventSection(g.title, g.note); sfx("tap"); }
   });
 }
 
@@ -620,8 +636,7 @@ $$(".tabbar button").forEach(function(b){ b.addEventListener("click",function(){
 
 /* ---------- Settings ---------- */
 function renderSettings(){ var gn=$("#gardenName"); if(gn) gn.value=gardenName();
-  var sp=$("#signPreview"); if(sp) sp.textContent=gardenName()||"Your sign";
-  var ts=$("#testSoundSettings"); if(ts && !ts.dataset.done){ ts.dataset.done="1"; ts.addEventListener("click",function(){ sfx("fanfare"); buzz([20,40,20]); }); } }
+  var sp=$("#signPreview"); if(sp) sp.textContent=gardenName()||"Your sign"; }
 function bindSettings(){
   var gn=$("#gardenName"); if(!gn) return;
   gn.addEventListener("input",function(){ var v=this.value.slice(0,6); this.value=v; localStorage.setItem("tc-garden-name",v); var sp=$("#signPreview"); if(sp) sp.textContent=v||"Your sign"; renderMindGarden(); });
@@ -636,8 +651,8 @@ function buildMoodGrid(){ var g=$("#moodGrid"); if(!g||g.children.length) return
 function refreshMood(){
   $$("#moodGrid .moodbtn").forEach(function(b){ b.classList.toggle("sel", +b.textContent===mood); });
   $$(".tierchip").forEach(function(c){ c.classList.toggle("on", c.dataset.tier===P.plantForMood(mood)); });
-  /* The person is NOT told tree / shrub / flower (or how many layers) until the session ends. */
-  $("#moodPlant").textContent="Mood "+mood+" — answer a few prompts and grow something.";
+  /* The person is NOT told tree / shrub / flower (or how many layers) until the session ends.
+     (The "Mood X — answer a few prompts and grow something." line is gone — Debs, 2026-11-22: pointless.) */
   var br=$("#moodBranch");
   if(mood<=3){ br.classList.remove("hidden"); $("#moodBranchText").textContent="Rough day. Before you grow, want to look back at a good day first? It can help to remember one went well."; $("#toStep2").textContent="Grow anyway →"; }
   else { br.classList.add("hidden"); $("#toStep2").textContent="Next: pick a world →"; }
@@ -650,7 +665,14 @@ async function renderGoodDays(){ var all=await dbAll(); var good=all.filter(func
   good.slice(0,12).forEach(function(p){ var b=document.createElement("button"); b.className="btn secondary"; b.type="button"; b.style.margin="4px 4px 0 0"; b.textContent=speciesOf(p)+" · "+prettyDate(p.date)+" · mood "+p.mood; b.addEventListener("click",function(){ openPlant(p.id); }); g.appendChild(b); }); }
 async function hasGoodDays(){ var all=await dbAll(); return all.some(function(p){ return p.mood>=7; }); }
 /* mood is picked with the 10 tappable buttons (buildMoodGrid), no slider. */
-function showStep(n){ [1,2,3].forEach(function(i){ $("#step"+i).classList.toggle("hidden",i!==n); $("#s"+i).classList.toggle("on",i<=n); }); $("#stepPreview").classList.add("hidden"); if(n!==3) stopSceneAnim(); }
+/* Step pills live only on the preview ("3 · YOUR PLANT") and session ("3 · GROW")
+   cards, as in the mockup — there is no shared pills bar on the mood/world steps,
+   so showStep no longer toggles one. */
+function showStep(n){ [1,2,3].forEach(function(i){ $("#step"+i).classList.toggle("hidden",i!==n); }); $("#stepPreview").classList.add("hidden"); if(n!==3) stopSceneAnim();
+  /* No cloud garden overview while answering questions (Debs, 2026-11-22) — the
+     garden is hidden during the grow session and comes back when it ends. */
+  var mg=$("#mindGarden"); if(mg) mg.classList.toggle("hidden", n===3);
+  var gn=$("#giftNote"); if(gn) gn.classList.toggle("hidden", n===3); }
 function drawWorldThumbs(){ $$(".world").forEach(function(w){ var cv=w.querySelector("canvas"); if(!cv||cv.dataset.done) return; cv.dataset.done="1"; var wd=w.dataset.world; drawScene(cv,"tree",4,8,wd,false,P.speciesFor(5,wd),1.3); }); }
 $("#toStep2").addEventListener("click",function(){ localStorage.setItem("tc-checkin-date",todayStr()); sfx("tap"); buzz(15); showStep(2); });
 $("#backTo1").addEventListener("click",function(){ showStep(1); });
@@ -683,7 +705,7 @@ function startSession(byo){
     pl=byoType; layers=P.byoSteps(byoType,topic); sp=P.byoSpeciesFor(byoType,selectedWorld); }
   else { pl=plantFor(mood); layers=P.buildLayers(pl); sp=P.speciesFor(mood,selectedWorld); }
   session={ mood:mood, plant:pl, species:sp, world:selectedWorld, date:todayStr(), layers:layers, answers:[], usedFallbacks:[], createdAt:Date.now(), byo:!!byo, topic:byo?($("#byoTopic").value||"").trim():"", color:byo?byoColor:null };
-  ynAnswer=null; audioBlob=null; $("#stepPreview").classList.add("hidden"); showStep(3); $("#doneCard").classList.add("hidden"); $("#promptCard").classList.remove("hidden");
+  ynAnswer=null; audioBlob=null; hideEventSection(); $("#stepPreview").classList.add("hidden"); showStep(3); $("#doneCard").classList.add("hidden"); $("#promptCard").classList.remove("hidden");
   $("#worldChip").textContent=WORLD_LABEL[selectedWorld];
   renderPrompt(); drawScene($("#scene"),pl,0,layers.length,selectedWorld,false,sp,0,session.color); renderProgress(); sfx("grow"); buzz(20); startSceneAnim();
 }
@@ -711,39 +733,62 @@ function renderPrompt(){
   $("#kindChip").textContent= layer.kind==="grounding" ? "yes / no" : layer.kind==="short" ? "short answer" : "open-ended";
   $("#ynBox").classList.toggle("hidden",layer.kind!=="grounding");
   $("#textBox").classList.toggle("hidden",layer.kind==="grounding");
-  ynAnswer=null; audioBlob=null; $("#answerText").value=""; $("#recPlay").classList.add("hidden"); $("#rerecord").classList.add("hidden"); $("#recStatus").textContent=""; $("#remarkLine").textContent="";
+  /* Mockup: the Grow button lives only with text answers — Yes/No answers grow
+     directly on the tap, so the button is hidden for grounding layers. */
+  $("#growBtn").classList.toggle("hidden",layer.kind==="grounding");
+  $("#growHint").textContent= layer.kind==="grounding" ? "Tap Yes or Not quite — it grows right away." : "Answer first — then press Grow.";
+  ynAnswer=null; audioBlob=null; advancing=false; $("#answerText").value=""; $("#recPlay").classList.add("hidden"); $("#rerecord").classList.add("hidden"); $("#recStatus").textContent=""; $("#remarkLine").textContent="";
   $$("#ynBox button").forEach(function(b){ b.classList.remove("sel"); });
   renderProgress();
 }
-$$("#ynBox button").forEach(function(b){ b.addEventListener("click",function(){ ynAnswer=b.dataset.yn; $$("#ynBox button").forEach(function(o){o.classList.toggle("sel",o===b)}); sfx(ynAnswer==="Yes"?"yes":"no"); buzz(15);
+/* Mockup advance behaviour: a Yes/No tap answers the layer directly — there is no
+   Grow press for grounding layers. The remark is dab's reward line shown after the
+   tap, so wait just long enough to read it (1.4s), then grow and move on. */
+$$("#ynBox button").forEach(function(b){ b.addEventListener("click",function(){
+  if(!session || advancing) return;
+  ynAnswer=b.dataset.yn; $$("#ynBox button").forEach(function(o){o.classList.toggle("sel",o===b)}); sfx(ynAnswer==="Yes"?"yes":"no"); buzz(15);
   /* Remark AFTER the tap, as a reward — only when its tag fits the answer. Otherwise a gentle rotating line. */
   var layer=session.layers[session.answers.length]; if(!layer) return;
   var r=remarkFor(layer, ynAnswer);
   $("#remarkLine").textContent = r || (ynAnswer==="No" ? nextFallback() : "Thanks for your honest answer.");
+  advancing=true;
+  setTimeout(function(){ advancing=false; recordAnswer(); }, 1400);
 }); });
-$("#growBtn").addEventListener("click",function(){
-  if(!session) return; var layer=session.layers[session.answers.length]; if(!layer) return;
+function recordAnswer(){
+  if(!session || advancing) return; var layer=session.layers[session.answers.length]; if(!layer) return;
   var text=layer.kind==="grounding" ? ynAnswer : $("#answerText").value.trim();
-  if(layer.kind==="grounding" && !ynAnswer){ $("#growHint").textContent="Tap YES or NO first."; return; }
+  if(layer.kind==="grounding" && !ynAnswer){ $("#growHint").textContent="Tap Yes or Not quite first."; return; }
   if(layer.kind!=="grounding" && !text && !audioBlob){ $("#growHint").textContent="Type something, or record a voice note first."; return; }
   session.answers.push({kind:layer.kind,q:layer.q,a:text||"",audio:audioBlob});
   audioBlob=null; sfx("grow"); buzz([15,30,15]);
   var done=session.answers.length, total=session.layers.length;
   drawScene($("#scene"),session.plant,done,total,session.world,true,session.species,animTime,session.color); renderProgress();
   setTimeout(function(){ if(done>=total) finishSession(); else renderPrompt(); }, 260);
-});
+}
+$("#growBtn").addEventListener("click",function(){ recordAnswer(); });
 function feelButtons(buttons){
   var box=$("#feelButtons"); box.innerHTML="";
   buttons.forEach(function(b){ var btn=document.createElement("button"); btn.className="btn "+(b.cls||"secondary"); btn.type="button"; btn.textContent=b.label; btn.addEventListener("click",b.fn); box.appendChild(btn); });
 }
-function backToCloud(){ stopSceneAnim(); session=null; showStep(1); refreshMood(); renderMindGarden(); switchTab("grow"); }
-function growAnotherPlant(){ stopSceneAnim(); session=null; showStep(1); refreshMood(); }
+/* Random events open a section and tell you something happened (Debs, 2026-11-22,
+   like the mockup) — not just a quiet line under the garden. */
+function showEventSection(title, note){
+  var c=$("#eventCard"); if(!c) return;
+  $("#eventTitle").textContent=title; $("#eventNote").textContent=note;
+  c.classList.remove("hidden");
+  try{ c.scrollIntoView({behavior:"smooth", block:"start"}); }catch(e){}
+  sfx("fanfare");
+}
+function hideEventSection(){ var c=$("#eventCard"); if(c) c.classList.add("hidden"); }
+function backToCloud(){ stopSceneAnim(); session=null; hideEventSection(); showStep(1); refreshMood(); renderMindGarden(); switchTab("grow"); }
+function growAnotherPlant(){ stopSceneAnim(); session=null; hideEventSection(); showStep(1); refreshMood(); }
 function maybeRandomEvent(totalPlants){
-  /* After growing a few plants, a random event may leave a gift plant in the cloud garden. Max 2 per day. */
-  if(totalPlants<3) return;
+  /* After growing a few plants, a random event may leave a gift plant in the cloud garden. Max 2 per day.
+     Returns the event that fired (or null) so the caller can open the event section about it. */
+  if(totalPlants<3) return null;
   var todaysGifts=getGifts().filter(function(g){ return g.date===todayStr(); });
-  if(todaysGifts.length>=2) return;
-  if(Math.random()>0.6) return;
+  if(todaysGifts.length>=2) return null;
+  if(Math.random()>0.6) return null;
   var gifts=getGifts(), recent=gifts.slice(-5).map(function(g){ return g.id; });
   var pool=P.randomEvents.filter(function(e){ return recent.indexOf(e.id)===-1; });
   if(!pool.length) pool=P.randomEvents;
@@ -751,6 +796,7 @@ function maybeRandomEvent(totalPlants){
   gifts.push({id:ev.id, title:ev.title, note:ev.note, gift:ev.gift, date:todayStr()});
   localStorage.setItem("tc-gifts", JSON.stringify(gifts.slice(-10)));
   var gn=$("#giftNote"); if(gn) gn.textContent=ev.title+": "+ev.note;
+  return ev;
 }
 async function finishSession(){
   stopSceneAnim();
@@ -758,17 +804,23 @@ async function finishSession(){
   var allBefore=await dbAll();
   dbPut(p).then(function(){ sfx("fanfare"); buzz([30,50,30,50,80]);
     /* The finished plant replaces a weed on the cloud garden. */
+    var hadWeed=getWeeds()>0;
     setWeeds(getWeeds()-1);
-    maybeRandomEvent(allBefore.length+1);
+    var firedEvent=maybeRandomEvent(allBefore.length+1);
     renderMindGarden();
-    /* Congratulations: rotate the lines, and always name the plant grown. */
-    var idx=0; try{ idx=+localStorage.getItem("tc-congrats-idx")||0; }catch(e){}
-    var aAn=function(n){ return /^[aeiou]/i.test(n||"") ? "an" : "a"; };
-    var line=P.congrats[idx%P.congrats.length].replace(/a \[plant\]/g, aAn(p.species)+" "+p.species).replace(/\[plant\]/g, p.species);
-    try{ localStorage.setItem("tc-congrats-idx", String(idx+1)); }catch(e){}
+    /* If a random event fired, open the event section and tell the user something happened. */
+    if(firedEvent) setTimeout(function(){ showEventSection(firedEvent.title, firedEvent.note); }, 350);
+    /* Congratulations, mockup exactly: the same 10-line pool, starting at a random
+       line and rotating in order (in memory only, no persistence), the plant named
+       with the right a/an — and nothing appended after the line. */
+    var line=P.congrats[congratsIdx%P.congrats.length].replace(/a \[plant\]/g, aAn(p.species)+" "+p.species).replace(/\[plant\]/g, p.species);
+    congratsIdx++;
     $("#promptCard").classList.add("hidden"); $("#doneCard").classList.remove("hidden");
-    $("#doneTitle").textContent=p.species.toUpperCase()+" PLANTED!";
-    $("#doneText").textContent=line+" From a stump to "+P.ends[p.plant]+". "+p.answers.length+" layers grown in "+WORLD_LABEL[p.world]+"."+(p.byo?" ★ Grown by you":"");
+    $("#doneEmoji").textContent=POT_EMOJI[p.plant]||"🌱";
+    $("#doneTitle").textContent="CONGRATULATIONS";
+    $("#doneText").textContent=line;
+    $("#doneByo").classList.toggle("hidden", !(p.byo || !!P.BYO_PROFILES[p.species]));
+    $("#doneCloudCaption").innerHTML=hadWeed ? "Your <b>"+p.species+"</b> has landed on your cloud garden — <b>right where a dry weed was.</b> Head back home to see it there." : "Your <b>"+p.species+"</b> has landed on your cloud garden. No weeds to replace today — it's pure addition. Head back home to see it there.";
     /* Branches are shown immediately — only this plant's prompts + answers. */
     $("#doneBranches").innerHTML=branchesHTML(p);
     drawScene($("#scene"),p.plant,p.answers.length,p.answers.length,p.world,true,p.species,1.3,p.color); renderProgress();
@@ -794,6 +846,8 @@ async function finishSession(){
 }
 $("#seeGarden").addEventListener("click",function(){ backToCloud(); });
 $("#growAnother").addEventListener("click",function(){ growAnotherPlant(); });
+$("#eventSee").addEventListener("click",function(){ backToCloud(); });
+$("#eventClose").addEventListener("click",function(){ hideEventSection(); });
 
 /* ---------- voice ---------- */
 $("#recBtn").addEventListener("click",async function(){
@@ -829,9 +883,13 @@ var gardenFilter="all";
    date + topic/mood, universe + "tap for branches", "★ Grown by you" for BYO specials. */
 var POT_EMOJI={tree:"🌳", shrub:"🌿", flower:"🌸"};
 function potDate(ds){ var d=new Date(ds+"T00:00:00"); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
+var WORLD_EMOJI={valley:"🏞️",desert:"🏜️",space:"🪐"};
 function plantCard(p){
+  /* Mockup pot markup exactly: emoji + species, "19 Nov · mood 5" or " · topic: work",
+     universe emoji + name + " · tap for branches", and the "★ Grown by you" chip for
+     Build-Your-Own plants and special species. No ground strip. */
   var d=document.createElement("button"); d.className="plantcard"; d.type="button";
-  d.innerHTML='<canvas width="150" height="190"></canvas><div class="ground"></div><b>'+(POT_EMOJI[p.plant]||"🌱")+" "+speciesOf(p)+'</b><span>'+potDate(p.date)+(p.topic?" · "+p.topic.replace(/</g,"&lt;"):" · mood "+p.mood)+'</span><span>'+WORLD_LABEL[p.world]+' · tap for branches</span>'+(p.byo?'<span class="badge">★ Grown by you</span>':"");
+  d.innerHTML='<canvas width="150" height="190"></canvas><div class="pname">'+(POT_EMOJI[p.plant]||"🌱")+" "+speciesOf(p)+'</div><div class="pdate">'+potDate(p.date)+(p.topic?" · topic: "+p.topic.replace(/</g,"&lt;"):" · mood "+p.mood)+'</div><div class="puni">'+(WORLD_EMOJI[p.world]||"")+" "+WORLD_LABEL[p.world]+' · tap for branches</div>'+((p.byo||!!P.BYO_PROFILES[speciesOf(p)])?'<div class="pbyo">★ Grown by you</div>':"");
   d.addEventListener("click",function(){ openPlant(p.id); });
   setTimeout(function(){ drawScene(d.querySelector("canvas"),p.plant,p.answers.length,p.answers.length,p.world,false,speciesOf(p),1.3,p.color); },0);
   return d;
@@ -932,9 +990,25 @@ function drawDaySnapshot(cv, ps){
   }
 }
 function dayVerdict(av){ return av<=3?"Rough":av<=6?"Mixed":"Good"; }
+/* The day detail snapshot is vertical and longer (Debs, 2026-11-22): the 220×190
+   day scene is drawn once, then scaled uniformly into the tall 300×320 canvas over
+   the same sky, so the plants grow big and vertical instead of squished flat. */
+function drawDaySnapshotBig(cv, ps){
+  var tmp=document.createElement("canvas"); tmp.width=220; tmp.height=190;
+  drawDaySnapshot(tmp, ps);
+  var x=cv.getContext("2d"); if(!x) return; var W=cv.width, H=cv.height;
+  var av=dayMood(ps), skyTop, skyBot;
+  if(av<=3){ skyTop="#4a5568"; skyBot="#79879a"; }
+  else if(av<=6){ skyTop="#7fb2d9"; skyBot="#dcefc9"; }
+  else { skyTop="#5db9e8"; skyBot="#eafbd8"; }
+  skyGradient(x, W, H, skyTop, skyBot);
+  var s=Math.min(W/220, H/190), dw=220*s, dh=190*s;
+  x.imageSmoothingEnabled=false;
+  x.drawImage(tmp, (W-dw)/2, (H-dh)/2, dw, dh);
+}
 function showDay(ds,ps){ $("#dayDetail").classList.remove("hidden");
   var av=dayMood(ps); $("#dayTitle").textContent=prettyDate(ds)+" — a "+dayVerdict(av)+" day ("+ps.length+" plant"+(ps.length>1?"s":"")+")";
-  setTimeout(function(){ drawDaySnapshot($("#daySnap"), ps); },0);
+  setTimeout(function(){ drawDaySnapshotBig($("#daySnap"), ps); },0);
   var box=$("#dayPlants"); box.innerHTML=""; ps.forEach(function(p){ box.appendChild(plantCard(p)); });
   sfx("tap"); }
 $("#prevMonth").addEventListener("click",function(){ calCursor.setMonth(calCursor.getMonth()-1); renderCalendar(); });
@@ -984,28 +1058,6 @@ async function monthlyCheck(){ var now=new Date(), cur=now.getFullYear()+"-"+Str
   $("#monthlyKeep").onclick=function(){ done("Kept for now — I'll ask again next month."); $("#monthlyCard").classList.add("hidden"); };
 }
 
-/* ---------- Reminders (local only) ---------- */
-function showCheckinNotif(){ var msg="How are you feeling right now?";
-  if("serviceWorker" in navigator && navigator.serviceWorker.controller){ navigator.serviceWorker.ready.then(function(reg){ reg.showNotification("Tree Cloud — "+msg,{body:"Tap to check in. Rough day? We'll show your good days first. Good day? Plant a flower.",tag:"tc-checkin",icon:"icons/icon-192.png"}); }); }
-  else if("Notification" in window && Notification.permission==="granted"){ new Notification("Tree Cloud — "+msg,{body:"Tap to check in."}); }
-  $("#remindStatus").textContent="Nudge sent — how are you feeling right now?"; }
-function nextReminderMs(){ var t=(localStorage.getItem("tc-remind-time")||"19:00").split(":"); var d=new Date(); d.setHours(+t[0],+t[1],0,0); if(d<=new Date()) d.setDate(d.getDate()+1); return d-Date.now(); }
-function scheduleReminder(){ if(localStorage.getItem("tc-remind")!=="on") return; setTimeout(function(){ showCheckinNotif(); scheduleReminder(); }, nextReminderMs()); }
-$("#enableRemind").addEventListener("click",async function(){
-  if(!("Notification" in window)){ $("#remindStatus").textContent="Notifications aren't supported in this browser."; return; }
-  var perm=await Notification.requestPermission();
-  if(perm!=="granted"){ $("#remindStatus").textContent="Notifications blocked — allow them in your browser / phone settings, then try again."; return; }
-  localStorage.setItem("tc-remind","on"); localStorage.setItem("tc-remind-time",$("#remindTime").value||"19:00");
-  $("#remindStatus").textContent="Reminders on at "+$("#remindTime").value+" — I'll nudge you when the app is open / installed. Also set a phone alarm as backup, it always works."; scheduleReminder(); });
-var _tr=$("#testRemind"); if(_tr) _tr.addEventListener("click",function(){ if("Notification" in window && Notification.permission!=="granted"){ Notification.requestPermission().then(function(){ showCheckinNotif(); }); } else showCheckinNotif(); });
-$("#disableRemind").addEventListener("click",function(){ localStorage.setItem("tc-remind","off"); $("#remindStatus").textContent="Reminders off."; });
-$("#remindTime").addEventListener("change",function(){ localStorage.setItem("tc-remind-time",this.value); if(localStorage.getItem("tc-remind")==="on") scheduleReminder(); });
-function checkReminderOnOpen(){
-  if(localStorage.getItem("tc-remind")!=="on") return;
-  var t=(localStorage.getItem("tc-remind-time")||"19:00").split(":"); var now=new Date(); var rem=new Date(); rem.setHours(+t[0],+t[1],0,0);
-  if(now>=rem && localStorage.getItem("tc-checkin-date")!==todayStr()){ $("#moodBranch").classList.remove("hidden"); $("#moodBranchText").textContent="Reminder: how are you feeling right now? Check in above — rough days go to your good days first."; }
-  if(new URLSearchParams(location.search).get("checkin")){ switchTab("grow"); showStep(1); } }
-
 /* ---------- floating scroll button: one small button, down when at top, up when at bottom ---------- */
 function initScrollBtn(){
   var b=document.createElement("button"); b.id="scrollBtn"; b.type="button"; b.setAttribute("aria-label","Scroll page");
@@ -1019,5 +1071,5 @@ function initScrollBtn(){
 
 /* ---------- init ---------- */
 bindSoundControls(); bindSettings(); buildMoodGrid(); drawWorldThumbs(); initScrollBtn();
-openDB().then(function(){ refreshMood(); renderGarden(); renderCalendar(); renderGoodDays(); renderMindGarden(); monthlyCheck(); if(localStorage.getItem("tc-remind-time")) $("#remindTime").value=localStorage.getItem("tc-remind-time"); scheduleReminder(); checkReminderOnOpen(); }).catch(function(){ document.body.insertAdjacentHTML("beforeend","<p style='color:#fff;padding:10px'>Storage unavailable in this browser — Tree Cloud needs IndexedDB.</p>"); });
+openDB().then(function(){ refreshMood(); renderGarden(); renderCalendar(); renderGoodDays(); renderMindGarden(); monthlyCheck(); }).catch(function(){ document.body.insertAdjacentHTML("beforeend","<p style='color:#fff;padding:10px'>Storage unavailable in this browser — Tree Cloud needs IndexedDB.</p>"); });
 })();

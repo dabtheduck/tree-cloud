@@ -19,7 +19,6 @@
     <span><b id="todayLine"></b> · <span id="todayCount">0 plants today</span></span>
     <span class="soundrow">
       <label class="tgl"><input type="checkbox" id="soundOn" checked> Sound</label>
-      <button class="btn small" id="testSound" type="button" style="margin:0">Test</button>
     </span>
   </div>
 </header>
@@ -29,6 +28,13 @@
 <section id="tab-grow">
   <canvas id="mindGarden" width="600" height="320"></canvas>
   <p class="muted" id="giftNote" style="margin:8px 0 0"></p>
+  <div class="card hidden" id="eventCard">
+    <h2>Something happened in your garden!</h2>
+    <p id="eventTitle" style="font-weight:800;text-align:center"></p>
+    <p id="eventNote" style="text-align:center"></p>
+    <button class="btn" id="eventSee" type="button">See it on your cloud →</button>
+    <button class="btn ghost" id="eventClose" type="button">Close</button>
+  </div>
   <div class="card hidden" id="monthlyCard">
     <h2 id="monthlyTitle">Last month is done</h2>
     <p id="monthlyText" class="muted"></p>
@@ -38,13 +44,10 @@
     <button class="btn ghost" id="monthlyKeep" type="button">Keep it for now</button>
     <p id="monthlyStatus" class="muted"></p>
   </div>
-  <div class="steps"><div class="step on" id="s1">1 Check in</div><div class="step" id="s2">2 Pick a world</div><div class="step" id="s3">3 Answer &amp; grow</div></div>
-
   <div id="step1" class="card">
     <h2>How are you feeling right now?</h2>
     <div class="moodgrid" id="moodGrid"></div>
     <div class="tierchips"><span class="tierchip" data-tier="tree">1–3 · Tree</span><span class="tierchip" data-tier="shrub">4–6 · Shrub</span><span class="tierchip" data-tier="flower">7–10 · Flower</span></div>
-    <p class="plantline" id="moodPlant">Mood 5 — answer a few prompts and grow something.</p>
     <div id="moodBranch" class="hidden">
       <p id="moodBranchText" class="muted"></p>
       <button class="btn secondary" id="goodDaysBtn" type="button">Look back at your good days →</button>
@@ -64,8 +67,9 @@
   </div>
 
   <div id="stepPreview" class="card hidden">
+    <div class="steps"><span class="done">1 · CHECK IN ✓</span><span class="done">2 · WORLD ✓</span><span class="on">3 · YOUR PLANT</span></div>
     <h2 id="previewTitle">You'll be growing…</h2>
-    <canvas class="scene small" id="previewScene" width="480" height="170"></canvas>
+    <canvas class="done-scene" id="previewScene" width="300" height="380"></canvas>
     <p class="plantline" id="previewSpecies"></p>
     <p class="muted" id="previewDest" style="text-align:center"></p>
     <button class="btn" id="startGrow" type="button">Grow</button>
@@ -86,14 +90,17 @@
   </div>
 
   <div id="step3" class="hidden">
+    <div class="card" style="margin:0 0 12px">
+    <div class="steps"><span class="done">1 · CHECK IN ✓</span><span class="done">2 · WORLD ✓</span><span class="on">3 · GROW</span></div>
     <canvas class="scene" id="scene" width="480" height="260"></canvas>
+    </div>
     <div class="progress"><i id="progFill"></i></div>
     <div class="progmeta"><span id="progPct">0%</span><span id="progLabel">0 / 8</span><span id="progEnd"></span></div>
     <div class="card" id="promptCard">
       <div class="chips"><span class="chip" id="layerChip">Layer 1 / 8</span><span class="chip" id="kindChip">yes / no</span><span class="chip" id="worldChip">Valley</span></div>
       <p class="promptq" id="promptQ"></p>
       <p class="muted" id="remarkLine" style="margin:6px 0"></p>
-      <div id="ynBox" class="yn"><button type="button" data-yn="Yes">YES</button><button type="button" data-yn="No">NO</button></div>
+      <div id="ynBox" class="yn"><button type="button" data-yn="Yes">Yes ✓</button><button type="button" data-yn="No">Not quite</button></div>
       <div id="textBox" class="hidden"><textarea id="answerText" placeholder="Type it, or record a voice note below…" maxlength="2000"></textarea></div>
       <div class="voicerec">
         <b>Voice note (up to 1:00)</b> <span class="timer" id="recTimer">0:00</span><br>
@@ -103,11 +110,14 @@
         <audio id="recPlay" controls class="hidden"></audio>
         <div><button class="btn small hidden" id="rerecord" type="button">Re-record</button></div>
       </div>
-      <button class="btn" id="growBtn" type="button">Grow 🌱</button>
+      <button class="btn" id="growBtn" type="button">Grow ⬆</button>
       <p class="muted" id="growHint">Answer first — then press Grow.</p>
     </div>
     <div class="card hidden" id="doneCard">
-      <h2 id="doneTitle">PLANTED!</h2><p id="doneText"></p>
+      <div style="font-size:40px;text-align:center" id="doneEmoji">🌳</div>
+      <h2 id="doneTitle">CONGRATULATIONS</h2><p id="doneText" style="text-align:center"></p>
+      <p id="doneByo" class="hidden" style="text-align:center;margin-top:6px"><span class="badge">★ Grown by you</span></p>
+      <p class="muted" id="doneCloudCaption" style="text-align:center"></p>
       <h3>Branches</h3>
       <div id="doneBranches"></div>
       <div id="feelBetter" class="hidden">
@@ -147,7 +157,7 @@
   <p class="muted">Tap a day to see its plants.</p>
   <div class="calhead"><button class="btn small" id="prevMonth" type="button">← Prev</button><b id="calTitle"></b><button class="btn small" id="nextMonth" type="button">Next →</button></div>
   <div class="cal" id="calGrid"></div>
-  <div id="dayDetail" class="hidden card"><h3 id="dayTitle"></h3><canvas id="daySnap" width="300" height="190" style="width:100%;border-radius:6px;display:block;image-rendering:pixelated"></canvas><div id="dayPlants"></div></div>
+  <div id="dayDetail" class="hidden card"><h3 id="dayTitle"></h3><canvas id="daySnap" width="300" height="320" style="width:100%;border-radius:6px;display:block;image-rendering:pixelated"></canvas><div id="dayPlants"></div></div>
   <div class="card">
     <h3>Good days — to look back on</h3>
     <p class="muted">Days you rated 7 or higher. Tap a plant to hear / read what made it good.</p>
@@ -167,17 +177,6 @@
   <div class="card">
     <h3>Sound &amp; feel</h3>
     <p class="muted">One gentle sound set — a muted Pixel Rain. Desert and Outer Space have their own sounds.</p>
-    <button class="btn small" id="testSoundSettings" type="button">Test sound</button>
-  </div>
-  <div class="card">
-    <h3>Reminders — one simple nudge</h3>
-    <p class="muted">Pick one time. That's it. At that time, open Tree Cloud and it'll ask “How are you feeling right now?”</p>
-    <label class="muted">Remind me at <input type="time" id="remindTime" value="19:00"></label><br>
-    <button class="btn" id="enableRemind" type="button">Turn on reminders</button>
-    <button class="btn ghost" id="disableRemind" type="button">Turn off</button>
-    <button class="btn small" id="testRemind" type="button">Test nudge now</button>
-    <p id="remindStatus" class="muted"></p>
-    <p class="muted">On iPhone, the simplest reliable way: set one Clock alarm for that time, called “How are you feeling?” When it rings, open Tree Cloud.</p>
   </div>
   <div class="card">
     <h3>Backup — yours, on this device</h3>

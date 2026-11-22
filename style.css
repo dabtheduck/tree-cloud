@@ -56,14 +56,14 @@ canvas.scene.small{height:auto;aspect-ratio:480/260}
    3px ink border. The "You'll be growing…" preview is portrait 300×380. */
 canvas.done-scene{display:block;margin:4px auto 10px;width:150px;height:auto;image-rendering:pixelated;border:3px solid var(--ink);border-radius:6px}
 #mindGarden{width:100%;height:auto;display:block;border-radius:var(--radius);image-rendering:pixelated}
-/* Cloud-row paging: one row of 3 clouds at a time, with a down button for the next
-   row. Round buttons, same look as the floating scroll button. */
-#gardenRowNav{display:flex;align-items:center;justify-content:center;gap:14px;margin:8px 0 0}
-#gardenRowNav button{width:40px;height:40px;border-radius:50%;border:none;background:var(--card);color:var(--ink);box-shadow:0 2px 10px rgba(26,36,22,.25);font-size:18px;font-weight:800;cursor:pointer}
-#gardenRowNav button:disabled{opacity:.35;cursor:default}
-#gardenRowLabel{font-size:12px;font-weight:700}
-/* Garden surprises: the day's random events, collapsed into a cute little section
-   at the bottom of the home screen so nothing is lost if the big card is missed. */
+/* Cloud-row paging: one row of 3 clouds at a time, with a subtle down button for
+   the next row (dab, 2026-11-23: no row-count label, just a quiet up/down). */
+#gardenRowNav{display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 0}
+#gardenRowNav button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:15px;font-weight:800;cursor:pointer;opacity:.7}
+#gardenRowNav button:disabled{opacity:.25;cursor:default}
+/* Garden surprises: the day's random events, in a separate card below the garden
+   under "Something happened in your garden!" (dab, 2026-11-23) — the ONLY place
+   events read; there is no front-screen popup. Collapsed by default. */
 #eventReview{padding:10px 14px}
 #eventReviewList .ev{border-top:2px dashed var(--line);padding:8px 0}
 #eventReviewList .ev b{display:block;text-align:center}

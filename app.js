@@ -612,10 +612,9 @@ async function renderMindGarden(page){ var cv=$("#mindGarden"); if(!cv) return; 
      the up button when we're past the first row. */
   var nav=$("#gardenRowNav");
   if(nav){ nav.classList.remove("hidden");
-    var up=$("#gardenRowUp"), dn=$("#gardenRowDown"), lb=$("#gardenRowLabel");
+    var up=$("#gardenRowUp"), dn=$("#gardenRowDown");
     if(up) up.disabled=gardenRow<=0;
     if(dn) dn.disabled=gardenRow>=totalRows-1;
-    if(lb) lb.textContent="Row "+(gardenRow+1)+" of "+totalRows;
   }
   var gn=$("#giftNote"); if(gn && !gifts.length) gn.textContent="";
   /* Dateline count, mockup exactly: "N today · M total" — today count, then total plants ever. */
@@ -690,7 +689,7 @@ function showStep(n){ [1,2,3].forEach(function(i){ $("#step"+i).classList.toggle
   var mg=$("#mindGarden"); if(mg) mg.classList.toggle("hidden", n===3);
   var rn=$("#gardenRowNav"); if(rn) rn.classList.toggle("hidden", n===3);
   var gn=$("#giftNote"); if(gn) gn.classList.toggle("hidden", n===3);
-  /* Back on the front screen: an un-dismissed event card belongs here, on its own. */
+  /* Back on the front screen: refresh the below-garden events card. */
   if(n===1) renderEventState(); }
 function drawWorldThumbs(){ $$(".world").forEach(function(w){ var cv=w.querySelector("canvas"); if(!cv||cv.dataset.done) return; cv.dataset.done="1"; var wd=w.dataset.world; drawScene(cv,"tree",4,8,wd,false,P.speciesFor(5,wd),1.3); }); }
 $("#toStep2").addEventListener("click",function(){ localStorage.setItem("tc-checkin-date",todayStr()); sfx("tap"); buzz(15); showStep(2); });
@@ -724,7 +723,7 @@ function startSession(byo){
     pl=byoType; layers=P.byoSteps(byoType,topic); sp=P.byoSpeciesFor(byoType,selectedWorld); }
   else { pl=plantFor(mood); layers=P.buildLayers(pl); sp=P.speciesFor(mood,selectedWorld); }
   session={ mood:mood, plant:pl, species:sp, world:selectedWorld, date:todayStr(), layers:layers, answers:[], usedFallbacks:[], createdAt:Date.now(), byo:!!byo, topic:byo?($("#byoTopic").value||"").trim():"", color:byo?byoColor:null };
-  ynAnswer=null; audioBlob=null; hideEventSection(); $("#stepPreview").classList.add("hidden"); showStep(3); $("#doneCard").classList.add("hidden"); $("#promptCard").classList.remove("hidden");
+  ynAnswer=null; audioBlob=null; $("#stepPreview").classList.add("hidden"); showStep(3); $("#doneCard").classList.add("hidden"); $("#promptCard").classList.remove("hidden");
   $("#worldChip").textContent=WORLD_LABEL[selectedWorld];
   renderPrompt(); drawScene($("#scene"),pl,0,layers.length,selectedWorld,false,sp,0,session.color); renderProgress(); sfx("grow"); buzz(20); startSceneAnim();
 }
@@ -789,15 +788,12 @@ function feelButtons(buttons){
   var box=$("#feelButtons"); box.innerHTML="";
   buttons.forEach(function(b){ var btn=document.createElement("button"); btn.className="btn "+(b.cls||"secondary"); btn.type="button"; btn.textContent=b.label; btn.addEventListener("click",b.fn); box.appendChild(btn); });
 }
-/* Random events are a card on the FRONT screen (dab, 2026-11-22) — it appears on
-   its own, no tap needed — and then collapses into a cute little review section
-   at the bottom of the home screen, so it's never lost if the card is missed.
-   Events live in tc-gifts (with their date), so the card and the review section
-   reset every day: yesterday's events never show up again. Closing the card only
-   dismisses that one event (tc-event-dismissed); the review section keeps it. */
+/* Random events live ONLY in the separate card below the garden, under
+   "Something happened in your garden!" (dab, 2026-11-23) — there is no
+   front-screen popup card anymore. Events live in tc-gifts (with their date),
+   so the review card resets every day: yesterday's events never show up again.
+   Tapping a gift sprout on the cloud opens that same below-garden card. */
 function todaysEvents(){ return getGifts().filter(function(g){ return g.date===todayStr(); }); }
-function latestEvent(){ var t=todaysEvents(); return t.length? t[t.length-1] : null; }
-var shownEventKey=null;
 function renderEventReview(){
   var list=$("#eventReviewList"); if(!list) return;
   var t=todaysEvents(), tog=$("#eventReviewToggle");
@@ -812,28 +808,18 @@ function renderEventReview(){
     d.appendChild(b); d.appendChild(p); list.appendChild(d);
   });
 }
-function renderEventState(){
-  /* Show the card whenever today has an event the user hasn't closed yet — on the
-     front screen, by itself, no tap. A new day has no events yet, so the card
-     stays hidden until one fires. */
-  var ev=latestEvent(), c=$("#eventCard"); if(!c) return;
-  var dismissed=ev && localStorage.getItem("tc-event-dismissed")===ev.date+":"+ev.id;
-  if(ev && !dismissed){ $("#eventTitle").textContent=ev.title; $("#eventNote").textContent=ev.note; shownEventKey=ev.date+":"+ev.id; c.classList.remove("hidden"); }
-  else c.classList.add("hidden");
-  renderEventReview();
-}
-/* Random events open a section and tell you something happened (Debs, 2026-11-22,
-   like the mockup) — not just a quiet line under the garden. */
+/* Refresh the below-garden events card (the only place events read). Called on
+   load, on returning to the cloud, and after an event fires. */
+function renderEventState(){ renderEventReview(); }
+/* A gift sprout on the cloud was tapped: open the event in the below-garden card
+   — expand it and scroll to it. No popup, ever. */
 function showEventSection(title, note, key){
-  var c=$("#eventCard"); if(!c) return;
-  $("#eventTitle").textContent=title; $("#eventNote").textContent=note;
-  if(key) shownEventKey=key;
-  c.classList.remove("hidden");
-  try{ c.scrollIntoView({behavior:"smooth", block:"start"}); }catch(e){}
-  sfx("fanfare");
   renderEventReview();
+  var l=$("#eventReviewList"); if(l) l.classList.remove("hidden");
+  renderEventReview();
+  var c=$("#eventReview"); if(c){ try{ c.scrollIntoView({behavior:"smooth", block:"start"}); }catch(e){} }
+  sfx("fanfare");
 }
-function hideEventSection(){ var c=$("#eventCard"); if(c) c.classList.add("hidden"); }
 function backToCloud(){ stopSceneAnim(); session=null; showStep(1); refreshMood(); renderMindGarden(); switchTab("grow"); renderEventState(); }
 function growAnotherPlant(){ stopSceneAnim(); session=null; showStep(1); refreshMood(); renderEventState(); }
 function daysBetween(a,b){ return Math.round((new Date(a+"T00:00:00")-new Date(b+"T00:00:00"))/864e5); }
@@ -850,7 +836,8 @@ function maybeRandomEvent(totalPlants){
      have passed since it last fired (fired day 0 → earliest return day 8). The
      randomization is plain Math.random — never seeded by the date or weekday — so
      events are never fixed to a weekday; the 7-day rule is the only constraint.
-     Returns the event that fired (or null) so the caller can open the event section about it. */
+     The fired event just lands in tc-gifts, so it reads in the below-garden
+     "Something happened in your garden!" card only — no popup. */
   if(totalPlants<3) return null;
   pruneGiftHistory();
   var todaysGifts=getGifts().filter(function(g){ return g.date===todayStr(); });
@@ -868,7 +855,8 @@ function maybeRandomEvent(totalPlants){
   var gifts=getGifts();
   gifts.push({id:ev.id, title:ev.title, note:ev.note, gift:ev.gift, date:todayStr()});
   localStorage.setItem("tc-gifts", JSON.stringify(gifts.slice(-16)));
-  var gn=$("#giftNote"); if(gn) gn.textContent=ev.title+": "+ev.note;
+  /* No line under the garden about it (dab, 2026-11-23): the event reads ONLY in
+     the separate card below the garden, under "Something happened in your garden!" */
   return ev;
 }
 async function finishSession(){
@@ -879,13 +867,15 @@ async function finishSession(){
     /* The finished plant replaces a weed on the cloud garden. */
     var hadWeed=getWeeds()>0;
     setWeeds(getWeeds()-1);
-    var firedEvent=maybeRandomEvent(allBefore.length+1);
+    maybeRandomEvent(allBefore.length+1);
     /* Land on the cloud row the new plant is on, so the first look at the garden
        after growing shows it (row paging means it may not be on row 1). */
     var todayCountAfter=allBefore.filter(function(p){ return p.date===todayStr(); }).length+1;
     renderMindGarden(Math.floor((todayCountAfter-1)/9));
-    /* If a random event fired, open the event section and tell the user something happened. */
-    if(firedEvent) setTimeout(function(){ showEventSection(firedEvent.title, firedEvent.note, todayStr()+":"+firedEvent.id); }, 350);
+    /* If a random event fired, it lands in the below-garden "Something happened
+       in your garden!" card only (dab, 2026-11-23) — no popup. The toggle will
+       show "(N today)" when the user heads back to the cloud. */
+    renderEventState();
     /* Congratulations, mockup exactly: the same 10-line pool, starting at a random
        line and rotating in order (in memory only, no persistence), the plant named
        with the right a/an — and nothing appended after the line. */
@@ -922,7 +912,6 @@ async function finishSession(){
 }
 $("#seeGarden").addEventListener("click",function(){ backToCloud(); });
 $("#growAnother").addEventListener("click",function(){ growAnotherPlant(); });
-$("#eventClose").addEventListener("click",function(){ if(shownEventKey) localStorage.setItem("tc-event-dismissed", shownEventKey); hideEventSection(); renderEventReview(); });
 
 /* ---------- voice ---------- */
 $("#recBtn").addEventListener("click",async function(){

@@ -537,12 +537,21 @@ function gardenName(){ return (localStorage.getItem("tc-garden-name")||"").slice
 var CLOUD_ISLANDS=[{cx:100,w:196,baseY:226},{cx:300,w:216,baseY:240},{cx:500,w:196,baseY:226}];
 var CLOUD_SLOTS=[[140,182,224],[270,316,362],[452,500,544]];
 function cloudLayout(n){ var rows=Math.max(1, Math.ceil(n/6)); return {perRow:6, rows:rows, rowH:150}; }
-async function renderMindGarden(){ var cv=$("#mindGarden"); if(!cv) return; var x=cv.getContext("2d"); if(!x) return;
+/* Cloud-row paging (dab, 2026-11-22): the garden shows ONE row of 3 cloud islands
+   at a time, with a down button for the next row (and an up button back). A visual
+   row holds 3 islands × 3 slots = 9 items; cloudLayout's perRow 6 still decides
+   how many rows the garden has in total, as before — this only changes how many
+   rows are shown at once. */
+var gardenRow=0;
+async function renderMindGarden(page){ var cv=$("#mindGarden"); if(!cv) return; var x=cv.getContext("2d"); if(!x) return;
   var all=await dbAll(); var todays=all.filter(function(p){ return p.date===todayStr(); });
   var weeds=getWeeds();
   var gifts=getGifts().filter(function(g){ return g.date===todayStr(); });
   var n=todays.length+weeds+gifts.length;
-  var lay=cloudLayout(Math.max(9,n)), W=600, H=320+(lay.rows-1)*150;
+  var lay=cloudLayout(Math.max(9,n)), totalRows=lay.rows;
+  if(typeof page==="number") gardenRow=page;
+  gardenRow=Math.max(0, Math.min(totalRows-1, gardenRow));
+  var W=600, H=320;
   cv.width=W; cv.height=H;
   /* Size by aspect ratio, never from clientWidth: clientWidth is 0 while the garden
      is hidden (e.g. during a grow session), which used to leave a wrong fixed
@@ -576,31 +585,37 @@ async function renderMindGarden(){ var cv=$("#mindGarden"); if(!cv) return; var 
   gifts.forEach(function(g){ items.push({kind:"gift", g:g}); });
   for(var wi=0; wi<weeds; wi++) items.push({kind:"weed", seed:wi});
   /* Draw order (dab, 2026-11-21: some plants were hidden behind the cloud):
-     Pass 1 draws ALL cloud islands first, pass 2 draws the sign and ALL plants /
-     gifts / weeds on top. Islands overlap each other's slots (island 2's puffs reach
-     into island 1's third slot), so drawing island-by-island let a later cloud
-     paint over an earlier plant. Now every plant is always in front of every cloud. */
-  for(var r=0;r<lay.rows;r++){
-    for(var isl=0; isl<3; isl++){
-      var isle=CLOUD_ISLANDS[isl], cy=isle.baseY+r*150;
-      drawCloudIsland(x, isle.cx, cy, isle.w);
-    }
+     Pass 1 draws this row's cloud islands first, pass 2 draws the sign and this
+     row's plants / gifts / weeds on top. Islands overlap each other's slots
+     (island 2's puffs reach into island 1's third slot), so drawing island-by-
+     island let a later cloud paint over an earlier plant. Now every plant is
+     always in front of every cloud. */
+  for(var isl=0; isl<3; isl++){
+    var isle=CLOUD_ISLANDS[isl];
+    drawCloudIsland(x, isle.cx, isle.baseY, isle.w);
   }
-  drawSign(x, name, CLOUD_ISLANDS[0].baseY);
-  for(var r2=0;r2<lay.rows;r2++){
-    for(var isl2=0; isl2<3; isl2++){
-      var isle2=CLOUD_ISLANDS[isl2], cy2=isle2.baseY+r2*150;
-      for(var s=0;s<3;s++){
-        var idx=r2*9+isl2*3+s; if(idx>=items.length) break;
-        var it=items[idx], sx=CLOUD_SLOTS[isl2][s], sy=cy2;
+  if(gardenRow===0) drawSign(x, name, CLOUD_ISLANDS[0].baseY);
+  for(var isl2=0; isl2<3; isl2++){
+    var isle2=CLOUD_ISLANDS[isl2];
+    for(var s=0;s<3;s++){
+        var idx=gardenRow*9+isl2*3+s; if(idx>=items.length) break;
+        var it=items[idx], sx=CLOUD_SLOTS[isl2][s], sy=isle2.baseY;
         if(it.kind==="plant"){ drawMiniPlant(x, sx, sy, speciesOf(it.p), it.p.color, idx===todays.length-1, it.p.world); }
         else if(it.kind==="weed"){ drawWeed(x, sx, sy, it.seed); }
         else { /* gift sprout */
           x.fillStyle="#40916c"; x.fillRect(sx-2, sy-22, 4, 22);
           x.fillStyle="#74c69d"; x.fillRect(sx-11, sy-26, 11, 5); x.fillRect(sx, sy-30, 11, 5);
           x.fillStyle="#d9a441"; pxCircle(x, sx, sy-32, 4, "#d9a441"); }
-      }
     }
+  }
+  /* Row paging nav: the down button when another row of clouds is below,
+     the up button when we're past the first row. */
+  var nav=$("#gardenRowNav");
+  if(nav){ nav.classList.remove("hidden");
+    var up=$("#gardenRowUp"), dn=$("#gardenRowDown"), lb=$("#gardenRowLabel");
+    if(up) up.disabled=gardenRow<=0;
+    if(dn) dn.disabled=gardenRow>=totalRows-1;
+    if(lb) lb.textContent="Row "+(gardenRow+1)+" of "+totalRows;
   }
   var gn=$("#giftNote"); if(gn && !gifts.length) gn.textContent="";
   /* Dateline count, mockup exactly: "N today · M total" — today count, then total plants ever. */
@@ -611,11 +626,12 @@ function mindGardenClick(e){
   var cv=$("#mindGarden"); if(!cv) return; var r=cv.getBoundingClientRect(); var px=(e.clientX-r.left)*(cv.width/r.width), py=(e.clientY-r.top)*(cv.height/r.height);
   dbAll().then(function(all){ var todays=all.filter(function(p){ return p.date===todayStr(); });
     var weeds=getWeeds(); var gifts=getGifts().filter(function(g){ return g.date===todayStr(); });
-    var n=todays.length+weeds+gifts.length, lay=cloudLayout(Math.max(9,n));
+    var n=todays.length+weeds+gifts.length;
     var best=-1, bestDx=1e9;
-    for(var row=0;row<lay.rows;row++) for(var isl=0;isl<3;isl++) for(var s=0;s<3;s++){
-      var idx=row*9+isl*3+s; if(idx>=n) break;
-      var sx=CLOUD_SLOTS[isl][s], sy=CLOUD_ISLANDS[isl].baseY+row*150;
+    /* Only this row's clouds are on screen (row paging), so only they are tappable. */
+    for(var isl=0;isl<3;isl++) for(var s=0;s<3;s++){
+      var idx=gardenRow*9+isl*3+s; if(idx>=n) break;
+      var sx=CLOUD_SLOTS[isl][s], sy=CLOUD_ISLANDS[isl].baseY;
       if(Math.abs(px-sx)<=32 && py>=sy-80 && py<=sy+12){
         var dx=Math.abs(px-sx);
         if(dx<bestDx){ bestDx=dx; best=idx; }
@@ -624,7 +640,7 @@ function mindGardenClick(e){
     if(best<0) return;
     if(best<todays.length){ openPlant(todays[best].id); return; }
     var gIdx=best-todays.length;
-    if(gIdx>=0 && gIdx<gifts.length){ var g=gifts[gIdx]; showEventSection(g.title, g.note); sfx("tap"); }
+    if(gIdx>=0 && gIdx<gifts.length){ var g=gifts[gIdx]; showEventSection(g.title, g.note, g.date+":"+g.id); sfx("tap"); }
   });
 }
 
@@ -672,7 +688,10 @@ function showStep(n){ [1,2,3].forEach(function(i){ $("#step"+i).classList.toggle
   /* No cloud garden overview while answering questions (Debs, 2026-11-22) — the
      garden is hidden during the grow session and comes back when it ends. */
   var mg=$("#mindGarden"); if(mg) mg.classList.toggle("hidden", n===3);
-  var gn=$("#giftNote"); if(gn) gn.classList.toggle("hidden", n===3); }
+  var rn=$("#gardenRowNav"); if(rn) rn.classList.toggle("hidden", n===3);
+  var gn=$("#giftNote"); if(gn) gn.classList.toggle("hidden", n===3);
+  /* Back on the front screen: an un-dismissed event card belongs here, on its own. */
+  if(n===1) renderEventState(); }
 function drawWorldThumbs(){ $$(".world").forEach(function(w){ var cv=w.querySelector("canvas"); if(!cv||cv.dataset.done) return; cv.dataset.done="1"; var wd=w.dataset.world; drawScene(cv,"tree",4,8,wd,false,P.speciesFor(5,wd),1.3); }); }
 $("#toStep2").addEventListener("click",function(){ localStorage.setItem("tc-checkin-date",todayStr()); sfx("tap"); buzz(15); showStep(2); });
 $("#backTo1").addEventListener("click",function(){ showStep(1); });
@@ -770,31 +789,85 @@ function feelButtons(buttons){
   var box=$("#feelButtons"); box.innerHTML="";
   buttons.forEach(function(b){ var btn=document.createElement("button"); btn.className="btn "+(b.cls||"secondary"); btn.type="button"; btn.textContent=b.label; btn.addEventListener("click",b.fn); box.appendChild(btn); });
 }
+/* Random events are a card on the FRONT screen (dab, 2026-11-22) — it appears on
+   its own, no tap needed — and then collapses into a cute little review section
+   at the bottom of the home screen, so it's never lost if the card is missed.
+   Events live in tc-gifts (with their date), so the card and the review section
+   reset every day: yesterday's events never show up again. Closing the card only
+   dismisses that one event (tc-event-dismissed); the review section keeps it. */
+function todaysEvents(){ return getGifts().filter(function(g){ return g.date===todayStr(); }); }
+function latestEvent(){ var t=todaysEvents(); return t.length? t[t.length-1] : null; }
+var shownEventKey=null;
+function renderEventReview(){
+  var list=$("#eventReviewList"); if(!list) return;
+  var t=todaysEvents(), tog=$("#eventReviewToggle");
+  var open=!list.classList.contains("hidden");
+  if(tog) tog.textContent = t.length ? "🌼 Something happened in your garden! ("+t.length+" today) "+(open?"▾":"▸") : "🌼 Garden surprises "+(open?"▾":"▸");
+  if(!t.length){ list.innerHTML="<p class='muted' style='text-align:center'>No little surprises yet today — keep growing and something might visit. 🌱</p>"; return; }
+  list.innerHTML="";
+  t.forEach(function(g){
+    var d=document.createElement("div"); d.className="ev";
+    var b=document.createElement("b"); b.textContent=g.title;
+    var p=document.createElement("p"); p.className="muted"; p.textContent=g.note;
+    d.appendChild(b); d.appendChild(p); list.appendChild(d);
+  });
+}
+function renderEventState(){
+  /* Show the card whenever today has an event the user hasn't closed yet — on the
+     front screen, by itself, no tap. A new day has no events yet, so the card
+     stays hidden until one fires. */
+  var ev=latestEvent(), c=$("#eventCard"); if(!c) return;
+  var dismissed=ev && localStorage.getItem("tc-event-dismissed")===ev.date+":"+ev.id;
+  if(ev && !dismissed){ $("#eventTitle").textContent=ev.title; $("#eventNote").textContent=ev.note; shownEventKey=ev.date+":"+ev.id; c.classList.remove("hidden"); }
+  else c.classList.add("hidden");
+  renderEventReview();
+}
 /* Random events open a section and tell you something happened (Debs, 2026-11-22,
    like the mockup) — not just a quiet line under the garden. */
-function showEventSection(title, note){
+function showEventSection(title, note, key){
   var c=$("#eventCard"); if(!c) return;
   $("#eventTitle").textContent=title; $("#eventNote").textContent=note;
+  if(key) shownEventKey=key;
   c.classList.remove("hidden");
   try{ c.scrollIntoView({behavior:"smooth", block:"start"}); }catch(e){}
   sfx("fanfare");
+  renderEventReview();
 }
 function hideEventSection(){ var c=$("#eventCard"); if(c) c.classList.add("hidden"); }
-function backToCloud(){ stopSceneAnim(); session=null; hideEventSection(); showStep(1); refreshMood(); renderMindGarden(); switchTab("grow"); }
-function growAnotherPlant(){ stopSceneAnim(); session=null; hideEventSection(); showStep(1); refreshMood(); }
+function backToCloud(){ stopSceneAnim(); session=null; showStep(1); refreshMood(); renderMindGarden(); switchTab("grow"); renderEventState(); }
+function growAnotherPlant(){ stopSceneAnim(); session=null; showStep(1); refreshMood(); renderEventState(); }
+function daysBetween(a,b){ return Math.round((new Date(a+"T00:00:00")-new Date(b+"T00:00:00"))/864e5); }
+function pruneGiftHistory(){ /* Events only matter for 7 days back — older ones can never block a new event, and they must never show up in today's review. */
+  var all=getGifts(), today=todayStr();
+  var kept=all.filter(function(g){ var d=daysBetween(today,g.date); return d>=0 && d<=7; });
+  if(kept.length!==all.length) localStorage.setItem("tc-gifts", JSON.stringify(kept.slice(-16)));
+}
 function maybeRandomEvent(totalPlants){
   /* After growing a few plants, a random event may leave a gift plant in the cloud garden. Max 2 per day.
+     Daily reset (dab, 2026-11-22): the cap and the gift list are per-date, so a new
+     day starts fresh — yesterday's events don't carry over.
+     7-day no-repeat (dab, 2026-11-22): an event can't fire again until 7 full days
+     have passed since it last fired (fired day 0 → earliest return day 8). The
+     randomization is plain Math.random — never seeded by the date or weekday — so
+     events are never fixed to a weekday; the 7-day rule is the only constraint.
      Returns the event that fired (or null) so the caller can open the event section about it. */
   if(totalPlants<3) return null;
+  pruneGiftHistory();
   var todaysGifts=getGifts().filter(function(g){ return g.date===todayStr(); });
   if(todaysGifts.length>=2) return null;
   if(Math.random()>0.6) return null;
-  var gifts=getGifts(), recent=gifts.slice(-5).map(function(g){ return g.id; });
-  var pool=P.randomEvents.filter(function(e){ return recent.indexOf(e.id)===-1; });
-  if(!pool.length) pool=P.randomEvents;
+  var all=getGifts(), today=todayStr();
+  var pool=P.randomEvents.filter(function(e){
+    var last=null;
+    all.forEach(function(g){ if(g.id===e.id && (!last || g.date>last)) last=g.date; });
+    if(!last) return true;
+    return daysBetween(today,last)>=8;
+  });
+  if(!pool.length) return null; /* every event fired within the last 7 days — skip the day rather than repeat one */
   var ev=pool[Math.floor(Math.random()*pool.length)];
+  var gifts=getGifts();
   gifts.push({id:ev.id, title:ev.title, note:ev.note, gift:ev.gift, date:todayStr()});
-  localStorage.setItem("tc-gifts", JSON.stringify(gifts.slice(-10)));
+  localStorage.setItem("tc-gifts", JSON.stringify(gifts.slice(-16)));
   var gn=$("#giftNote"); if(gn) gn.textContent=ev.title+": "+ev.note;
   return ev;
 }
@@ -807,9 +880,12 @@ async function finishSession(){
     var hadWeed=getWeeds()>0;
     setWeeds(getWeeds()-1);
     var firedEvent=maybeRandomEvent(allBefore.length+1);
-    renderMindGarden();
+    /* Land on the cloud row the new plant is on, so the first look at the garden
+       after growing shows it (row paging means it may not be on row 1). */
+    var todayCountAfter=allBefore.filter(function(p){ return p.date===todayStr(); }).length+1;
+    renderMindGarden(Math.floor((todayCountAfter-1)/9));
     /* If a random event fired, open the event section and tell the user something happened. */
-    if(firedEvent) setTimeout(function(){ showEventSection(firedEvent.title, firedEvent.note); }, 350);
+    if(firedEvent) setTimeout(function(){ showEventSection(firedEvent.title, firedEvent.note, todayStr()+":"+firedEvent.id); }, 350);
     /* Congratulations, mockup exactly: the same 10-line pool, starting at a random
        line and rotating in order (in memory only, no persistence), the plant named
        with the right a/an — and nothing appended after the line. */
@@ -846,8 +922,7 @@ async function finishSession(){
 }
 $("#seeGarden").addEventListener("click",function(){ backToCloud(); });
 $("#growAnother").addEventListener("click",function(){ growAnotherPlant(); });
-$("#eventSee").addEventListener("click",function(){ backToCloud(); });
-$("#eventClose").addEventListener("click",function(){ hideEventSection(); });
+$("#eventClose").addEventListener("click",function(){ if(shownEventKey) localStorage.setItem("tc-event-dismissed", shownEventKey); hideEventSection(); renderEventReview(); });
 
 /* ---------- voice ---------- */
 $("#recBtn").addEventListener("click",async function(){
@@ -1071,5 +1146,8 @@ function initScrollBtn(){
 
 /* ---------- init ---------- */
 bindSoundControls(); bindSettings(); buildMoodGrid(); drawWorldThumbs(); initScrollBtn();
-openDB().then(function(){ refreshMood(); renderGarden(); renderCalendar(); renderGoodDays(); renderMindGarden(); monthlyCheck(); }).catch(function(){ document.body.insertAdjacentHTML("beforeend","<p style='color:#fff;padding:10px'>Storage unavailable in this browser — Tree Cloud needs IndexedDB.</p>"); });
+$("#gardenRowUp").addEventListener("click",function(){ gardenRow=Math.max(0,gardenRow-1); renderMindGarden(); sfx("tap"); });
+$("#gardenRowDown").addEventListener("click",function(){ gardenRow=gardenRow+1; renderMindGarden(); sfx("tap"); });
+$("#eventReviewToggle").addEventListener("click",function(){ var l=$("#eventReviewList"); l.classList.toggle("hidden"); renderEventReview(); sfx("tap"); });
+openDB().then(function(){ pruneGiftHistory(); refreshMood(); renderGarden(); renderCalendar(); renderGoodDays(); renderMindGarden(); renderEventState(); monthlyCheck(); }).catch(function(){ document.body.insertAdjacentHTML("beforeend","<p style='color:#fff;padding:10px'>Storage unavailable in this browser — Tree Cloud needs IndexedDB.</p>"); });
 })();

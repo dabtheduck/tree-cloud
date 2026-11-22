@@ -56,6 +56,18 @@ canvas.scene.small{height:auto;aspect-ratio:480/260}
    3px ink border. The "You'll be growing…" preview is portrait 300×380. */
 canvas.done-scene{display:block;margin:4px auto 10px;width:150px;height:auto;image-rendering:pixelated;border:3px solid var(--ink);border-radius:6px}
 #mindGarden{width:100%;height:auto;display:block;border-radius:var(--radius);image-rendering:pixelated}
+/* Cloud-row paging: one row of 3 clouds at a time, with a down button for the next
+   row. Round buttons, same look as the floating scroll button. */
+#gardenRowNav{display:flex;align-items:center;justify-content:center;gap:14px;margin:8px 0 0}
+#gardenRowNav button{width:40px;height:40px;border-radius:50%;border:none;background:var(--card);color:var(--ink);box-shadow:0 2px 10px rgba(26,36,22,.25);font-size:18px;font-weight:800;cursor:pointer}
+#gardenRowNav button:disabled{opacity:.35;cursor:default}
+#gardenRowLabel{font-size:12px;font-weight:700}
+/* Garden surprises: the day's random events, collapsed into a cute little section
+   at the bottom of the home screen so nothing is lost if the big card is missed. */
+#eventReview{padding:10px 14px}
+#eventReviewList .ev{border-top:2px dashed var(--line);padding:8px 0}
+#eventReviewList .ev b{display:block;text-align:center}
+#eventReviewList .ev p{margin:4px 0 0;text-align:center}
 .progress{height:14px;border-radius:20px;background:#eef2e4;margin:12px 0 4px;position:relative;overflow:hidden}
 .progress i{display:block;height:100%;background:var(--accent);border-radius:20px;width:0%}
 .progmeta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}

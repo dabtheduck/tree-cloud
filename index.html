@@ -27,12 +27,16 @@
 <!-- GROW -->
 <section id="tab-grow">
   <canvas id="mindGarden" width="600" height="320"></canvas>
+  <div id="gardenRowNav" class="hidden">
+    <button id="gardenRowUp" type="button" aria-label="Earlier clouds">↑</button>
+    <span id="gardenRowLabel" class="muted"></span>
+    <button id="gardenRowDown" type="button" aria-label="More clouds below">↓</button>
+  </div>
   <p class="muted" id="giftNote" style="margin:8px 0 0"></p>
   <div class="card hidden" id="eventCard">
     <h2>Something happened in your garden!</h2>
     <p id="eventTitle" style="font-weight:800;text-align:center"></p>
     <p id="eventNote" style="text-align:center"></p>
-    <button class="btn" id="eventSee" type="button">See it on your cloud →</button>
     <button class="btn ghost" id="eventClose" type="button">Close</button>
   </div>
   <div class="card hidden" id="monthlyCard">
@@ -91,7 +95,6 @@
 
   <div id="step3" class="hidden">
     <div class="card" style="margin:0 0 12px">
-    <div class="steps"><span class="done">1 · CHECK IN ✓</span><span class="done">2 · WORLD ✓</span><span class="on">3 · GROW</span></div>
     <canvas class="scene" id="scene" width="480" height="260"></canvas>
     </div>
     <div class="progress"><i id="progFill"></i></div>
@@ -127,6 +130,10 @@
       <button class="btn" id="seeGarden" type="button">Back to your cloud →</button>
       <button class="btn secondary" id="growAnother" type="button">Grow another plant</button>
     </div>
+  </div>
+  <div class="card" id="eventReview">
+    <button class="btn quiet" id="eventReviewToggle" type="button">🌼 Garden surprises ▸</button>
+    <div id="eventReviewList" class="hidden"></div>
   </div>
 </section>
 
